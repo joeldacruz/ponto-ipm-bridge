@@ -38,4 +38,21 @@ namespace PontoCamara.TopdataAgent
         public bool ok;
         public string error;
     }
+
+    public sealed class TopdataEvent
+    {
+        public string sourceId;
+        public int nsr;
+        public string employeeNo;
+        public string occurredAt;
+        public string kind;
+        public string rawType;
+        public string rawPayload;
+    }
+
+    public sealed class EventBatch
+    {
+        public string deviceId;
+        public TopdataEvent[] events;
+    }
 }
