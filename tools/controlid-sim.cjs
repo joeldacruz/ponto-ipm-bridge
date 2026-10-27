@@ -74,7 +74,12 @@ function logRequest(req, url, body) {
     headers: {
       host: req.headers.host,
       'content-type': req.headers['content-type'],
-      'user-agent': req.headers['user-agent']
+      'user-agent': req.headers['user-agent'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'x-forwarded-proto': req.headers['x-forwarded-proto'],
+      'cf-ray': req.headers['cf-ray'],
+      'expect': req.headers['expect']
     }
   };
   recent.unshift(item);
