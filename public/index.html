@@ -14,6 +14,10 @@
     table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eef1f4;font-size:14px}th{color:#667085}
     code{background:#f2f4f7;padding:2px 5px;border-radius:4px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     button{border:0;border-radius:9px;padding:9px 12px;cursor:pointer}.btn{background:#182230;color:#fff}
+    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}.formgrid label{font-size:13px;color:#475467}
+    input{display:block;width:100%;margin-top:6px;padding:10px 11px;border:1px solid #d0d5dd;border-radius:9px;font:inherit;color:#182230;background:#fff}
+    .check{display:flex;gap:7px;align-items:center;border:1px solid #e4e7ec;border-radius:9px;padding:8px 10px}.check input{width:auto;margin:0}
+    @media(max-width:720px){.formgrid{grid-template-columns:1fr}}
   </style>
 </head>
 <body><div class="wrap">
@@ -33,6 +37,25 @@
     <h2>Equipamentos</h2>
     <table><thead><tr><th>Função</th><th>Equipamento</th><th>Fabricante</th><th>Endereço</th><th>Status</th><th>Último NSR</th><th>Batidas</th></tr></thead>
     <tbody id="devices"><tr><td colspan="7" class="muted">Carregando...</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Novo servidor</h2>
+      <span class="muted" id="formStatus"></span>
+    </div>
+    <form id="employeeForm" style="margin-top:16px">
+      <div class="formgrid">
+        <label>Nome<input id="empName" required placeholder="Nome completo"></label>
+        <label>Matrícula<input id="empRegistration" placeholder="Ex.: 3026"></label>
+        <label>CPF<input id="empCpf" inputmode="numeric" placeholder="Somente números"></label>
+      </div>
+      <div style="margin-top:14px">
+        <div class="muted" style="margin-bottom:8px">Enviar cadastro para</div>
+        <div id="deviceChecks" class="row"></div>
+      </div>
+      <div style="margin-top:16px"><button class="btn" type="submit">Cadastrar servidor</button></div>
+    </form>
   </div>
 
   <div class="card">
@@ -69,6 +92,11 @@ async function load(){
       <td>${esc(d.last_nsr??'—')}</td><td>${esc(d.attendance_count??0)}</td>
     </tr>`).join(''):'<tr><td colspan="7" class="muted">Nenhum REP cadastrado.</td></tr>';
 
+  document.getElementById('deviceChecks').innerHTML=devices.filter(d=>d.active).map(d=>`
+    <label class="check"><input type="checkbox" name="deviceId" value="${esc(d.id)}">
+      <span>${esc(d.name)} <span class="muted">(${d.role==='PRIMARY'?'Principal':'Secundário'})</span></span>
+    </label>`).join('') || '<span class="muted">Cadastre um REP antes de vincular servidores.</span>';
+
   document.getElementById('employees').innerHTML=employees.length?employees.map(e=>{
     const bs=e.bindings||[];
     return `<tr><td>${esc(e.name)}</td><td>${esc(e.registration||'—')}</td><td>${esc(e.cpf||'—')}</td>
@@ -76,6 +104,32 @@ async function load(){
       <td>${bs.map(b=>esc(b.sync_status)).join(', ')||'—'}</td></tr>`;
   }).join(''):'<tr><td colspan="5" class="muted">Nenhum servidor cadastrado.</td></tr>';
 }
+document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+  const status=document.getElementById('formStatus');
+  const deviceIds=[...document.querySelectorAll('input[name="deviceId"]:checked')].map(x=>x.value);
+  const payload={
+    name:document.getElementById('empName').value.trim(),
+    registration:document.getElementById('empRegistration').value.trim()||null,
+    cpf:document.getElementById('empCpf').value.replace(/\D/g,'')||null,
+    deviceIds
+  };
+  if(!payload.registration && !payload.cpf){
+    status.textContent='Informe matrícula ou CPF.';
+    return;
+  }
+  status.textContent='Salvando...';
+  const response=await fetch('/api/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const body=await response.json();
+  if(!response.ok){
+    status.textContent=body.error||'Falha ao cadastrar.';
+    return;
+  }
+  status.textContent='Servidor cadastrado. '+(body.syncJobs?.length?body.syncJobs.length+' sincronização(ões) enfileirada(s).':'Sem REP selecionado.');
+  ev.target.reset();
+  await load();
+});
+
 load().catch(err=>console.error(err));
 </script>
 </body></html>
