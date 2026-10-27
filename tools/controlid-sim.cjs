@@ -268,6 +268,22 @@ if (tlsPfx) {
 }
 
 server.on('connection', (socket) => {
+  const connectedAt = Date.now();
+  let rxBytes = 0;
+  socket.on('data', (chunk) => { rxBytes += chunk.length; });
+  socket.on('close', (hadError) => {
+    appendLog(tcpLogPath, {
+      at: new Date().toISOString(),
+      type: 'socket_closed',
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      durationMs: Date.now() - connectedAt,
+      rxBytes,
+      bytesRead: socket.bytesRead,
+      bytesWritten: socket.bytesWritten,
+      hadError
+    });
+  });
   socket.once('data', (chunk) => {
     appendLog(tcpLogPath, {
       at: new Date().toISOString(),
