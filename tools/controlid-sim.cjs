@@ -8,7 +8,11 @@ const { URL } = require('node:url');
 const port = Number(process.env.SIM_PORT || 3091);
 const login = process.env.SIM_USER || 'admin';
 const password = process.env.SIM_PASSWORD || 'admin';
-const serial = process.env.SIM_SERIAL || 'SIM671000001';
+const serial = process.env.SIM_SERIAL || '0001400000000001';
+const simMac = process.env.SIM_MAC || '02:00:00:00:67:01';
+const simVersionFW = Number(process.env.SIM_VERSION_FW || 257);
+const simVersionMRP = Number(process.env.SIM_VERSION_MRP || 1);
+const simIsFacial = String(process.env.SIM_IS_FACIAL || 'false').toLowerCase() === 'true';
 const tlsPfx = process.env.SIM_TLS_PFX || '';
 const tlsPfxPassword = process.env.SIM_TLS_PFX_PASSWORD || '';
 const logDir = path.resolve(process.env.SIM_LOG_DIR || './data/simulator');
@@ -156,13 +160,21 @@ const handler = async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/get_about.fcgi') {
       if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
-      return json(res, 200, {
-        mac:'02:00:00:00:67:01',
-        nSerie:serial,
-        versionFW:260,
-        versionMRP:1,
-        isFacial:true
+      const about = {
+        mac: simMac,
+        nSerie: serial,
+        versionFW: simVersionFW,
+        versionMRP: simVersionMRP,
+        isFacial: simIsFacial
+      };
+      appendLog(logFile, {
+        at: new Date().toISOString(),
+        type: 'response',
+        path: '/get_about.fcgi',
+        status: 200,
+        body: about
       });
+      return json(res, 200, about);
     }
 
     if (req.method === 'POST' && url.pathname === '/get_system_information.fcgi') {
