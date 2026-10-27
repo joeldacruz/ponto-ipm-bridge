@@ -10,6 +10,7 @@ const serial = process.env.SIM_SERIAL || 'SIM671000001';
 const logDir = path.resolve(process.env.SIM_LOG_DIR || './data/simulator');
 fs.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, 'requests.ndjson');
+const tcpLogFile = path.join(logDir, 'tcp.ndjson');
 const recent = [];
 
 function json(res, status, body) {
@@ -109,7 +110,8 @@ const server = http.createServer(async (req, res) => {
         serial,
         port,
         user: login,
-        logFile
+        logFile,
+        tcpLogFile
       });
     }
 
@@ -242,6 +244,32 @@ const server = http.createServer(async (req, res) => {
   } catch (err) {
     json(res, 500, {error:'simulator_error', message:String(err?.message || err)});
   }
+});
+
+server.on('connection', (socket) => {
+  const item = {
+    at: new Date().toISOString(),
+    type: 'tcp_connection',
+    remoteAddress: socket.remoteAddress,
+    remotePort: socket.remotePort,
+    localAddress: socket.localAddress,
+    localPort: socket.localPort
+  };
+  fs.appendFileSync(tcpLogFile, JSON.stringify(item) + '\n');
+});
+
+server.on('clientError', (err, socket) => {
+  const item = {
+    at: new Date().toISOString(),
+    type: 'client_error',
+    remoteAddress: socket.remoteAddress,
+    remotePort: socket.remotePort,
+    code: err.code,
+    message: err.message,
+    rawPacketHex: err.rawPacket ? err.rawPacket.subarray(0, 64).toString('hex') : null
+  };
+  fs.appendFileSync(tcpLogFile, JSON.stringify(item) + '\n');
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
 });
 
 server.listen(port, '0.0.0.0', () => {
