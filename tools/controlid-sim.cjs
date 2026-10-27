@@ -265,7 +265,18 @@ const server = tlsPfx
 
 if (tlsPfx) {
   server.on('secureConnection', (socket) => {
-    appendLog(tcpLogPath, { at: new Date().toISOString(), type: 'tls_secure_connection', remoteAddress: socket.remoteAddress, remotePort: socket.remotePort });
+    appendLog(tcpLogPath, {
+      at: new Date().toISOString(),
+      type: 'tls_secure_connection',
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      protocol: socket.getProtocol(),
+      alpnProtocol: socket.alpnProtocol || null,
+      cipher: socket.getCipher(),
+      servername: socket.servername || null,
+      authorized: socket.authorized,
+      authorizationError: socket.authorizationError || null
+    });
   });
   server.on('tlsClientError', (err, socket) => {
     appendLog(tcpLogPath, { at: new Date().toISOString(), type: 'tls_client_error', remoteAddress: socket?.remoteAddress, remotePort: socket?.remotePort, code: err.code, message: err.message });
