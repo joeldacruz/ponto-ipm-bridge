@@ -1,0 +1,1 @@
+Coloque aqui, localmente, o SDK oficial Topdata Inner REP. Nao versionar DLLs proprietarias no Git.\n
