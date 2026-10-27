@@ -1,0 +1,26 @@
+{
+  "name": "ponto-ipm-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Coletor de eventos de controle de acesso/frequência e gerador de arquivo para importação no IPM.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx tests/**/*.test.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "fast-xml-parser": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
