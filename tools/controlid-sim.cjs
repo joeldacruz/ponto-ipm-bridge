@@ -354,6 +354,21 @@ server.on('clientError', (err, socket) => {
   if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
 });
 
+server.on('error', (err) => {
+  console.error('ERRO DO SERVIDOR:', err);
+});
+
+server.on('close', () => {
+  console.error('SERVIDOR FOI FECHADO.');
+});
+
+// Mantem explicitamente o processo ativo durante os testes de homologacao.
+const keepAlive = setInterval(() => {}, 60 * 60 * 1000);
+process.on('SIGINT', () => {
+  clearInterval(keepAlive);
+  server.close(() => process.exit(0));
+});
+
 server.listen(port, '0.0.0.0', () => {
   const scheme = tlsPfx ? 'https' : 'http';
   console.log(`Simulador ${scheme.toUpperCase()} Control iD 671 na porta ${port}`);
