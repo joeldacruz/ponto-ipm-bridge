@@ -26,10 +26,12 @@ router.get('/health', (_req, res) => {
   const devices = db.prepare(`
     SELECT
       COUNT(*) AS total,
-      SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END) AS online
+      COALESCE(SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END),0) AS online
     FROM devices WHERE active=1
   `).get();
-  res.json({ ok: true, devices });
+  const employees = db.prepare('SELECT COUNT(*) AS total FROM employees WHERE active=1').get();
+  const attendance = db.prepare("SELECT COUNT(*) AS total FROM device_events WHERE kind='ATTENDANCE'").get();
+  res.json({ ok: true, devices, employees, attendance });
 });
 
 router.get('/api/devices', (_req, res) => {
