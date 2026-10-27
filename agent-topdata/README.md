@@ -31,3 +31,16 @@ Editar `App.config`:
 ## Segurança
 
 Nunca versionar chave de comunicação do REP, senha administrativa ou token de produção.
+
+
+## Coleta automática somente leitura
+
+A coleta real do Inner REP usa variáveis de ambiente locais, sem versionar a chave:
+
+- `TOPDATA_SDK_PATH`: caminho completo para `SDK_Inner_Rep.dll`;
+- `TOPDATA_COMM_KEY`: chave de comunicação do REP;
+- `TOPDATA_INITIAL_NSR`: NSR inicial homologado; padrão atual `43106`.
+
+O checkpoint fica em `%ProgramData%\PontoCamara\<deviceId>.nsr`.
+
+Na primeira execução o agente importa o NSR inicial e, nas seguintes, consulta o último NSR disponível e coleta apenas a diferença. O servidor deduplica por `sourceId = deviceId:nsr`.
