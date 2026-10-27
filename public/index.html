@@ -3,15 +3,79 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ponto IPM Bridge</title>
+  <title>Ponto Câmara</title>
   <style>
-    body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f6f7f9;color:#1d2733}.wrap{max-width:1000px;margin:auto;padding:32px}.card{background:white;border:1px solid #dde2e7;border-radius:12px;padding:20px;margin-bottom:16px}h1{margin-top:0}.muted{color:#667085}.ok{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef4ff}code{background:#f2f4f7;padding:2px 5px;border-radius:4px}
+    :root{font-family:Inter,system-ui,Arial,sans-serif;color:#182230;background:#f5f7fa}
+    *{box-sizing:border-box}body{margin:0}.wrap{max-width:1180px;margin:auto;padding:28px}
+    h1{margin:0 0 4px;font-size:28px}.muted{color:#667085}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:22px 0}
+    .card{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:18px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+    .kpi{font-size:30px;font-weight:700;margin-top:8px}.tag{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef2f6;font-size:12px}
+    .online{background:#ecfdf3}.offline{background:#fef3f2}.primary{background:#eff8ff}.secondary{background:#f9f5ff}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eef1f4;font-size:14px}th{color:#667085}
+    code{background:#f2f4f7;padding:2px 5px;border-radius:4px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    button{border:0;border-radius:9px;padding:9px 12px;cursor:pointer}.btn{background:#182230;color:#fff}
   </style>
 </head>
 <body><div class="wrap">
-  <h1>Ponto IPM Bridge</h1>
-  <p class="muted">Coleta de eventos de frequência e preparação de arquivo para importação no IPM.</p>
-  <div class="card"><strong>Escopo do MVP</strong><p>Hikvision DS-K1T342MX-E1 via ISAPI → separar ACESSO de FREQUÊNCIA → armazenar → conferir → exportar.</p></div>
-  <div class="card"><span class="ok">Importante</span><p>O exportador IPM definitivo ainda depende de um arquivo real aceito pelo IPM ou da documentação do layout. O CSV atual é apenas para homologação.</p></div>
-  <div class="card"><strong>API</strong><p><code>GET /health</code> · <code>GET /api/events/attendance</code> · <code>GET/POST /api/employees</code> · <code>POST /api/exports/AAAA-MM</code></p></div>
-</div></body></html>
+  <div class="row" style="justify-content:space-between">
+    <div><h1>Ponto Câmara</h1><div class="muted">Coleta multi-REP e integração com IPM</div></div>
+    <button class="btn" onclick="load()">Atualizar</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="muted">Equipamentos</div><div class="kpi" id="devicesCount">—</div></div>
+    <div class="card"><div class="muted">REPs online</div><div class="kpi" id="onlineCount">—</div></div>
+    <div class="card"><div class="muted">Servidores</div><div class="kpi" id="employeesCount">—</div></div>
+    <div class="card"><div class="muted">Batidas coletadas</div><div class="kpi" id="eventsCount">—</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Equipamentos</h2>
+    <table><thead><tr><th>Função</th><th>Equipamento</th><th>Fabricante</th><th>Endereço</th><th>Status</th><th>Último NSR</th><th>Batidas</th></tr></thead>
+    <tbody id="devices"><tr><td colspan="7" class="muted">Carregando...</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Servidores</h2>
+    <table><thead><tr><th>Nome</th><th>Matrícula</th><th>CPF</th><th>REPs vinculados</th><th>Sincronização</th></tr></thead>
+    <tbody id="employees"><tr><td colspan="5" class="muted">Carregando...</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <strong>Regra do projeto</strong>
+    <p class="muted">O REP é a fonte da marcação original. O Ponto Câmara coleta e administra; o IPM continua responsável por jornada, banco de horas, justificativas e fechamento.</p>
+  </div>
+</div>
+<script>
+const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load(){
+  const [devices,employees,events]=await Promise.all([
+    fetch('/api/devices').then(r=>r.json()),
+    fetch('/api/employees').then(r=>r.json()),
+    fetch('/api/events/attendance').then(r=>r.json())
+  ]);
+  devicesCount.textContent=devices.length;
+  onlineCount.textContent=devices.filter(d=>d.status==='ONLINE').length;
+  employeesCount.textContent=employees.length;
+  eventsCount.textContent=events.length;
+
+  document.getElementById('devices').innerHTML=devices.length?devices.map(d=>`
+    <tr>
+      <td><span class="tag ${d.role==='PRIMARY'?'primary':'secondary'}">${d.role==='PRIMARY'?'Principal':'Secundário'}</span></td>
+      <td>${esc(d.name)}<div class="muted">${esc(d.model||'')}</div></td>
+      <td>${esc(d.vendor)}</td>
+      <td>${esc(d.host||'—')}${d.port?':'+esc(d.port):''}</td>
+      <td><span class="tag ${d.status==='ONLINE'?'online':'offline'}">${esc(d.status)}</span></td>
+      <td>${esc(d.last_nsr??'—')}</td><td>${esc(d.attendance_count??0)}</td>
+    </tr>`).join(''):'<tr><td colspan="7" class="muted">Nenhum REP cadastrado.</td></tr>';
+
+  document.getElementById('employees').innerHTML=employees.length?employees.map(e=>{
+    const bs=e.bindings||[];
+    return `<tr><td>${esc(e.name)}</td><td>${esc(e.registration||'—')}</td><td>${esc(e.cpf||'—')}</td>
+      <td>${bs.map(b=>'<span class="tag">'+esc(b.device_name)+'</span>').join(' ')||'—'}</td>
+      <td>${bs.map(b=>esc(b.sync_status)).join(', ')||'—'}</td></tr>`;
+  }).join(''):'<tr><td colspan="5" class="muted">Nenhum servidor cadastrado.</td></tr>';
+}
+load().catch(err=>console.error(err));
+</script>
+</body></html>
