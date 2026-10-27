@@ -166,7 +166,8 @@ router.post('/api/agent/heartbeat', requireAgent, (req, res) => {
 });
 
 router.get('/api/agent/:agentId/jobs', requireAgent, (req, res) => {
-  res.json(leaseJobs(req.params.agentId, Number(req.query.limit || 20)));
+  const agentId = Array.isArray(req.params.agentId) ? req.params.agentId[0] : req.params.agentId;
+  res.json(leaseJobs(agentId, Number(req.query.limit || 20)));
 });
 
 router.post('/api/agent/jobs/:id/result', requireAgent, (req, res) => {
