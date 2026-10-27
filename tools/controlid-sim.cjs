@@ -14,7 +14,12 @@ const logDir = path.resolve(process.env.SIM_LOG_DIR || './data/simulator');
 fs.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, 'requests.ndjson');
 const tcpLogFile = path.join(logDir, 'tcp.ndjson');
+const tcpLogPath = tcpLogFile;
 const recent = [];
+
+function appendLog(filePath, item) {
+  fs.appendFileSync(filePath, JSON.stringify(item) + '\\n');
+}
 
 function json(res, status, body) {
   const text = JSON.stringify(body, null, 2);
