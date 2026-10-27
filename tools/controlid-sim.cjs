@@ -2,6 +2,7 @@ const http = require('node:http');
 const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { URL } = require('node:url');
 
 const port = Number(process.env.SIM_PORT || 3091);
@@ -16,15 +17,16 @@ const logFile = path.join(logDir, 'requests.ndjson');
 const tcpLogFile = path.join(logDir, 'tcp.ndjson');
 const tcpLogPath = tcpLogFile;
 const recent = [];
+const activeSessions = new Set();
 
 function appendLog(filePath, item) {
   fs.appendFileSync(filePath, JSON.stringify(item) + '\\n');
 }
 
 function json(res, status, body) {
-  const text = JSON.stringify(body, null, 2);
+  const text = JSON.stringify(body);
   res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(text)
   });
   res.end(text);
@@ -69,7 +71,11 @@ function parseBody(raw, contentType) {
 
 function validSession(url) {
   const s = url.searchParams.get('session');
-  return !!s && s.startsWith('SIM-');
+  return !!s && activeSessions.has(s);
+}
+
+function createSessionToken() {
+  return crypto.randomBytes(18).toString('base64');
 }
 
 function logRequest(req, url, body) {
@@ -132,7 +138,9 @@ const handler = async (req, res) => {
       if (body?.login !== login || body?.password !== password) {
         return json(res, 401, {error:'invalid_credentials'});
       }
-      return json(res, 200, {session:`SIM-${Date.now()}`});
+      const session = createSessionToken();
+      activeSessions.add(session);
+      return json(res, 200, {session});
     }
 
     if (req.method === 'POST' && url.pathname === '/session_is_valid.fcgi') {
@@ -140,7 +148,10 @@ const handler = async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/logout.fcgi') {
-      res.writeHead(200); return res.end();
+      const session = url.searchParams.get('session');
+      if (session) activeSessions.delete(session);
+      res.writeHead(200, {'Content-Length':'0'});
+      return res.end();
     }
 
     if (req.method === 'POST' && url.pathname === '/get_about.fcgi') {
