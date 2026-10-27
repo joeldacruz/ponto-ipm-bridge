@@ -49,15 +49,15 @@
 <script>
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function load(){
-  const [devices,employees,events]=await Promise.all([
+  const [health,devices,employees]=await Promise.all([
+    fetch('/health').then(r=>r.json()),
     fetch('/api/devices').then(r=>r.json()),
-    fetch('/api/employees').then(r=>r.json()),
-    fetch('/api/events/attendance').then(r=>r.json())
+    fetch('/api/employees').then(r=>r.json())
   ]);
-  devicesCount.textContent=devices.length;
-  onlineCount.textContent=devices.filter(d=>d.status==='ONLINE').length;
-  employeesCount.textContent=employees.length;
-  eventsCount.textContent=events.length;
+  devicesCount.textContent=health.devices?.total??devices.length;
+  onlineCount.textContent=health.devices?.online??devices.filter(d=>d.status==='ONLINE').length;
+  employeesCount.textContent=health.employees?.total??employees.length;
+  eventsCount.textContent=health.attendance?.total??0;
 
   document.getElementById('devices').innerHTML=devices.length?devices.map(d=>`
     <tr>
