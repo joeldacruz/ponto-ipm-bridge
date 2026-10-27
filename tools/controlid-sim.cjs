@@ -268,6 +268,17 @@ if (tlsPfx) {
 }
 
 server.on('connection', (socket) => {
+  socket.once('data', (chunk) => {
+    appendLog(tcpLogPath, {
+      at: new Date().toISOString(),
+      type: 'first_packet',
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      bytes: chunk.length,
+      hex: chunk.subarray(0, 128).toString('hex'),
+      ascii: chunk.subarray(0, 128).toString('latin1').replace(/[\x00-\x1F\x7F-\xFF]/g, '.')
+    });
+  });
   const item = {
     at: new Date().toISOString(),
     type: 'tcp_connection',
