@@ -277,6 +277,21 @@ if (tlsPfx) {
       authorized: socket.authorized,
       authorizationError: socket.authorizationError || null
     });
+
+    let loggedAppData = false;
+    socket.on('data', (chunk) => {
+      if (loggedAppData) return;
+      loggedAppData = true;
+      appendLog(tcpLogPath, {
+        at: new Date().toISOString(),
+        type: 'tls_app_data',
+        remoteAddress: socket.remoteAddress,
+        remotePort: socket.remotePort,
+        bytes: chunk.length,
+        hex: chunk.subarray(0, 512).toString('hex'),
+        ascii: chunk.subarray(0, 512).toString('latin1').replace(/[\\x00-\\x1F\\x7F-\\xFF]/g, '.')
+      });
+    });
   });
   server.on('tlsClientError', (err, socket) => {
     appendLog(tcpLogPath, { at: new Date().toISOString(), type: 'tls_client_error', remoteAddress: socket?.remoteAddress, remotePort: socket?.remotePort, code: err.code, message: err.message });
