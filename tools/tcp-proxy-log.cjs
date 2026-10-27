@@ -68,7 +68,19 @@ const server = net.createServer((client) => {
 
 server.on('error', (err) => {
   log({ type: 'proxy_server_error', code: err.code, message: err.message });
-  console.error(err);
+  console.error('ERRO DO PROXY:', err);
+});
+
+server.on('close', () => {
+  log({ type: 'proxy_server_closed' });
+  console.error('PROXY FOI FECHADO.');
+});
+
+// Mantem explicitamente o processo ativo durante os testes de homologacao.
+const keepAlive = setInterval(() => {}, 60 * 60 * 1000);
+process.on('SIGINT', () => {
+  clearInterval(keepAlive);
+  server.close(() => process.exit(0));
 });
 
 server.listen(listenPort, listenHost, () => {
