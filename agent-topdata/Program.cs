@@ -10,13 +10,29 @@ namespace PontoCamara.TopdataAgent
         private static AgentSettings ReadSettings()
         {
             AgentSettings s = new AgentSettings();
-            s.ServerUrl = ConfigurationManager.AppSettings["ServerUrl"] ?? "http://127.0.0.1:3090";
-            s.AgentId = ConfigurationManager.AppSettings["AgentId"] ?? "topdata-windows-01";
-            s.AgentToken = ConfigurationManager.AppSettings["AgentToken"] ?? "";
-            s.DeviceId = ConfigurationManager.AppSettings["DeviceId"] ?? "rep-topdata-02";
-            s.DeviceHost = ConfigurationManager.AppSettings["DeviceHost"] ?? "10.20.20.222";
-            s.DevicePort = Int32.Parse(ConfigurationManager.AppSettings["DevicePort"] ?? "51000");
-            s.LoopSeconds = Int32.Parse(ConfigurationManager.AppSettings["LoopSeconds"] ?? "30");
+            s.ServerUrl = Environment.GetEnvironmentVariable("PONTO_SERVER_URL")
+                ?? ConfigurationManager.AppSettings["ServerUrl"]
+                ?? "http://127.0.0.1:3090";
+            s.AgentId = Environment.GetEnvironmentVariable("PONTO_AGENT_ID")
+                ?? ConfigurationManager.AppSettings["AgentId"]
+                ?? "topdata-windows-01";
+            s.AgentToken = Environment.GetEnvironmentVariable("PONTO_AGENT_TOKEN")
+                ?? ConfigurationManager.AppSettings["AgentToken"]
+                ?? "";
+            s.DeviceId = Environment.GetEnvironmentVariable("PONTO_DEVICE_ID")
+                ?? ConfigurationManager.AppSettings["DeviceId"]
+                ?? "rep-topdata-02";
+            s.DeviceHost = Environment.GetEnvironmentVariable("TOPDATA_HOST")
+                ?? ConfigurationManager.AppSettings["DeviceHost"]
+                ?? "10.20.20.222";
+            s.DevicePort = Int32.Parse(
+                Environment.GetEnvironmentVariable("TOPDATA_PORT")
+                ?? ConfigurationManager.AppSettings["DevicePort"]
+                ?? "51000");
+            s.LoopSeconds = Int32.Parse(
+                Environment.GetEnvironmentVariable("TOPDATA_LOOP_SECONDS")
+                ?? ConfigurationManager.AppSettings["LoopSeconds"]
+                ?? "30");
             return s;
         }
 
