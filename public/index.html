@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ponto IPM Bridge</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f6f7f9;color:#1d2733}.wrap{max-width:1000px;margin:auto;padding:32px}.card{background:white;border:1px solid #dde2e7;border-radius:12px;padding:20px;margin-bottom:16px}h1{margin-top:0}.muted{color:#667085}.ok{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef4ff}code{background:#f2f4f7;padding:2px 5px;border-radius:4px}
+  </style>
+</head>
+<body><div class="wrap">
+  <h1>Ponto IPM Bridge</h1>
+  <p class="muted">Coleta de eventos de frequência e preparação de arquivo para importação no IPM.</p>
+  <div class="card"><strong>Escopo do MVP</strong><p>Hikvision DS-K1T342MX-E1 via ISAPI → separar ACESSO de FREQUÊNCIA → armazenar → conferir → exportar.</p></div>
+  <div class="card"><span class="ok">Importante</span><p>O exportador IPM definitivo ainda depende de um arquivo real aceito pelo IPM ou da documentação do layout. O CSV atual é apenas para homologação.</p></div>
+  <div class="card"><strong>API</strong><p><code>GET /health</code> · <code>GET /api/events/attendance</code> · <code>GET/POST /api/employees</code> · <code>POST /api/exports/AAAA-MM</code></p></div>
+</div></body></html>
