@@ -24,7 +24,7 @@ const recent = [];
 const activeSessions = new Set();
 
 function appendLog(filePath, item) {
-  fs.appendFileSync(filePath, JSON.stringify(item) + '\\n');
+  fs.appendFileSync(filePath, JSON.stringify(item) + '\n');
 }
 
 function json(res, status, body) {
@@ -75,11 +75,15 @@ function parseBody(raw, contentType) {
 
 function validSession(url) {
   const s = url.searchParams.get('session');
-  return !!s && activeSessions.has(s);
+  if (!s) return false;
+  if (activeSessions.has(s)) return true;
+  // URLSearchParams converte "+" em espaco quando o cliente nao faz encode.
+  return activeSessions.has(s.replace(/ /g, '+'));
 }
 
 function createSessionToken() {
-  return crypto.randomBytes(18).toString('base64');
+  // Token opaco e seguro para query string: evita +, / e =.
+  return crypto.randomBytes(18).toString('base64url');
 }
 
 function logRequest(req, url, body) {
@@ -159,7 +163,16 @@ const handler = async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/get_about.fcgi') {
-      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      if (!validSession(url)) {
+        appendLog(logFile, {
+          at: new Date().toISOString(),
+          type: 'response',
+          path: '/get_about.fcgi',
+          status: 401,
+          body: { error: 'invalid_session' }
+        });
+        return json(res, 401, {error:'invalid_session'});
+      }
       const about = {
         mac: simMac,
         nSerie: serial,
