@@ -269,32 +269,6 @@ if (tlsPfx) {
 
 server.on('connection', (socket) => {
   const connectedAt = Date.now();
-  let rxBytes = 0;
-  socket.on('data', (chunk) => { rxBytes += chunk.length; });
-  socket.on('close', (hadError) => {
-    appendLog(tcpLogPath, {
-      at: new Date().toISOString(),
-      type: 'socket_closed',
-      remoteAddress: socket.remoteAddress,
-      remotePort: socket.remotePort,
-      durationMs: Date.now() - connectedAt,
-      rxBytes,
-      bytesRead: socket.bytesRead,
-      bytesWritten: socket.bytesWritten,
-      hadError
-    });
-  });
-  socket.once('data', (chunk) => {
-    appendLog(tcpLogPath, {
-      at: new Date().toISOString(),
-      type: 'first_packet',
-      remoteAddress: socket.remoteAddress,
-      remotePort: socket.remotePort,
-      bytes: chunk.length,
-      hex: chunk.subarray(0, 128).toString('hex'),
-      ascii: chunk.subarray(0, 128).toString('latin1').replace(/[\x00-\x1F\x7F-\xFF]/g, '.')
-    });
-  });
   const item = {
     at: new Date().toISOString(),
     type: 'tcp_connection',
@@ -304,6 +278,19 @@ server.on('connection', (socket) => {
     localPort: socket.localPort
   };
   fs.appendFileSync(tcpLogFile, JSON.stringify(item) + '\n');
+
+  socket.on('close', (hadError) => {
+    appendLog(tcpLogPath, {
+      at: new Date().toISOString(),
+      type: 'socket_closed',
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      durationMs: Date.now() - connectedAt,
+      bytesRead: socket.bytesRead,
+      bytesWritten: socket.bytesWritten,
+      hadError
+    });
+  });
 });
 
 server.on('clientError', (err, socket) => {
