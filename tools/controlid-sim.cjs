@@ -309,6 +309,11 @@ if (tlsPfx) {
   });
 }
 
+
+server.on('checkExpectation', (req, res) => {
+  handler(req, res);
+});
+
 server.on('connection', (socket) => {
   const connectedAt = Date.now();
   const item = {
