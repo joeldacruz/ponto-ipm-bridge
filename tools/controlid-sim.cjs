@@ -258,6 +258,15 @@ const server = tlsPfx
   ? https.createServer({ pfx: fs.readFileSync(tlsPfx), passphrase: tlsPfxPassword }, handler)
   : http.createServer(handler);
 
+if (tlsPfx) {
+  server.on('secureConnection', (socket) => {
+    appendLog(tcpLogPath, { at: new Date().toISOString(), type: 'tls_secure_connection', remoteAddress: socket.remoteAddress, remotePort: socket.remotePort });
+  });
+  server.on('tlsClientError', (err, socket) => {
+    appendLog(tcpLogPath, { at: new Date().toISOString(), type: 'tls_client_error', remoteAddress: socket?.remoteAddress, remotePort: socket?.remotePort, code: err.code, message: err.message });
+  });
+}
+
 server.on('connection', (socket) => {
   const item = {
     at: new Date().toISOString(),
