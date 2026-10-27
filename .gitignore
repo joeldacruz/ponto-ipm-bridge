@@ -6,3 +6,12 @@ data/*.db-*
 exports/
 *.log
 .DS_Store
+
+# SDK Topdata local/proprietario
+agent-topdata/sdk/*.dll
+agent-topdata/sdk/*.exe
+agent-topdata/sdk/*.zip
+agent-topdata/sdk/*.rar
+agent-topdata/sdk/*.msi
+agent-topdata/sdk/**/*.dll
+agent-topdata/sdk/**/*.exe
