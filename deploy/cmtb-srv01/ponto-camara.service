@@ -1,0 +1,27 @@
+[Unit]
+Description=Ponto Camara - Coletor multi-REP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ponto-camara
+Group=ponto-camara
+WorkingDirectory=/srv/projetos/ponto-camara
+EnvironmentFile=/etc/ponto-camara/ponto-camara.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/dados/ponto-camara
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
