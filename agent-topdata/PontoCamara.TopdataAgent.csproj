@@ -20,6 +20,8 @@
     <Compile Include="Program.cs" />
     <Compile Include="ApiClient.cs" />
     <Compile Include="TopdataDeviceClient.cs" />
+    <Compile Include="TopdataAfdParser.cs" />
+    <Compile Include="TopdataSdkReader.cs" />
     <Compile Include="Models.cs" />
   </ItemGroup>
   <ItemGroup>
