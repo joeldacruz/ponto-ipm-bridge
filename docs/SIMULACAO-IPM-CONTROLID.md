@@ -86,3 +86,15 @@ Com esse log será possível reproduzir com precisão o protocolo que o IPM espe
 ```
 Hikvision ISAPI → Ponto IPM Bridge → API compatível esperada pelo IPM
 ```
+
+
+## Windows / teste sem npm
+
+Se o `npm install` falhar por causa de `better-sqlite3`, Node 24 ou `node-gyp`, use o simulador standalone:
+
+```powershell
+git pull
+node .\tools\controlid-sim.cjs
+```
+
+Esse arquivo usa apenas módulos nativos do Node.js e não exige `npm install`, Python, Visual Studio Build Tools ou SQLite.
