@@ -1,5 +1,6 @@
 using System;
 using System.Configuration;
+using System.IO;
 using System.Threading;
 
 namespace PontoCamara.TopdataAgent
@@ -19,11 +20,75 @@ namespace PontoCamara.TopdataAgent
             return s;
         }
 
+        private static void CollectAttendance(
+            ApiClient api,
+            TopdataSdkReader reader,
+            string deviceId,
+            string checkpointFile,
+            int initialNsr)
+        {
+            bool hasCheckpoint = File.Exists(checkpointFile);
+            int checkpoint = initialNsr;
+
+            if (hasCheckpoint)
+            {
+                string value = File.ReadAllText(checkpointFile).Trim();
+                if (value.Length > 0)
+                    checkpoint = Int32.Parse(value);
+            }
+
+            TopdataReadResult probe = reader.ReadNsr(checkpoint);
+            TopdataEvent probeEvent = TopdataAfdParser.ParseAttendance(deviceId, probe.rawLine);
+
+            if (!hasCheckpoint)
+            {
+                api.SendEvents(deviceId, new TopdataEvent[] { probeEvent });
+                File.WriteAllText(checkpointFile, checkpoint.ToString());
+                Console.WriteLine("NSR inicial importado: " + checkpoint);
+            }
+
+            int lastAvailable = checkpoint;
+            if (!String.IsNullOrEmpty(probe.lastNsr))
+                Int32.TryParse(probe.lastNsr, out lastAvailable);
+
+            if (lastAvailable <= checkpoint)
+                return;
+
+            for (int nsr = checkpoint + 1; nsr <= lastAvailable; nsr++)
+            {
+                TopdataReadResult read = reader.ReadNsr(nsr);
+                TopdataEvent evt = TopdataAfdParser.ParseAttendance(deviceId, read.rawLine);
+
+                if (evt.nsr != nsr)
+                    throw new InvalidOperationException("NSR retornado difere do solicitado.");
+
+                api.SendEvents(deviceId, new TopdataEvent[] { evt });
+                File.WriteAllText(checkpointFile, nsr.ToString());
+                Console.WriteLine("NSR coletado: " + nsr);
+            }
+        }
+
         private static void Main(string[] args)
         {
             AgentSettings settings = ReadSettings();
             ApiClient api = new ApiClient(settings.ServerUrl, settings.AgentToken);
             TopdataDeviceClient device = new TopdataDeviceClient(settings.DeviceHost, settings.DevicePort);
+
+            string sdkPath = Environment.GetEnvironmentVariable("TOPDATA_SDK_PATH");
+            string communicationKey = Environment.GetEnvironmentVariable("TOPDATA_COMM_KEY");
+            string initialNsrText = Environment.GetEnvironmentVariable("TOPDATA_INITIAL_NSR") ?? "43106";
+            int initialNsr = Int32.Parse(initialNsrText);
+
+            TopdataSdkReader reader = new TopdataSdkReader(
+                settings.DeviceHost,
+                communicationKey,
+                sdkPath);
+
+            string checkpointDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "PontoCamara");
+            Directory.CreateDirectory(checkpointDir);
+            string checkpointFile = Path.Combine(checkpointDir, settings.DeviceId + ".nsr");
 
             Console.WriteLine("Ponto Camara - Agente Topdata");
             Console.WriteLine("REP: {0}:{1}", settings.DeviceHost, settings.DevicePort);
@@ -37,6 +102,15 @@ namespace PontoCamara.TopdataAgent
                     bool online = device.IsReachable();
                     api.SendHeartbeat(settings.AgentId, settings.DeviceId, online);
                     Console.WriteLine("[{0}] REP {1}", DateTime.Now, online ? "ONLINE" : "OFFLINE");
+
+                    if (online && reader.IsConfigured)
+                    {
+                        CollectAttendance(api, reader, settings.DeviceId, checkpointFile, initialNsr);
+                    }
+                    else if (online)
+                    {
+                        Console.WriteLine("Coleta SDK desativada: defina TOPDATA_SDK_PATH e TOPDATA_COMM_KEY.");
+                    }
 
                     if (online)
                     {
