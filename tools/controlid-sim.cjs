@@ -1,0 +1,252 @@
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const { URL } = require('node:url');
+
+const port = Number(process.env.SIM_PORT || 3091);
+const login = process.env.SIM_USER || 'admin';
+const password = process.env.SIM_PASSWORD || 'admin';
+const serial = process.env.SIM_SERIAL || 'SIM671000001';
+const logDir = path.resolve(process.env.SIM_LOG_DIR || './data/simulator');
+fs.mkdirSync(logDir, { recursive: true });
+const logFile = path.join(logDir, 'requests.ndjson');
+const recent = [];
+
+function json(res, status, body) {
+  const text = JSON.stringify(body, null, 2);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(text)
+  });
+  res.end(text);
+}
+
+function html(res, status, body) {
+  res.writeHead(status, {'Content-Type':'text/html; charset=utf-8'});
+  res.end(body);
+}
+
+function text(res, status, body, type='text/plain; charset=utf-8') {
+  res.writeHead(status, {'Content-Type': type});
+  res.end(body);
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => {
+      data += chunk;
+      if (data.length > 2_000_000) {
+        reject(new Error('body_too_large'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
+function parseBody(raw, contentType) {
+  if (!raw) return {};
+  if ((contentType || '').includes('application/json')) {
+    try { return JSON.parse(raw); } catch { return { _raw: raw }; }
+  }
+  if ((contentType || '').includes('application/x-www-form-urlencoded')) {
+    return Object.fromEntries(new URLSearchParams(raw));
+  }
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+function validSession(url) {
+  const s = url.searchParams.get('session');
+  return !!s && s.startsWith('SIM-');
+}
+
+function logRequest(req, url, body) {
+  const item = {
+    at: new Date().toISOString(),
+    method: req.method,
+    path: url.pathname,
+    query: Object.fromEntries(url.searchParams.entries()),
+    body,
+    headers: {
+      host: req.headers.host,
+      'content-type': req.headers['content-type'],
+      'user-agent': req.headers['user-agent']
+    }
+  };
+  recent.unshift(item);
+  if (recent.length > 200) recent.pop();
+  fs.appendFileSync(logFile, JSON.stringify(item) + '\n');
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const raw = await readBody(req);
+    const body = parseBody(raw, req.headers['content-type']);
+    logRequest(req, url, body);
+
+    if (req.method === 'GET' && url.pathname === '/') {
+      return html(res, 200, `<!doctype html>
+<meta charset="utf-8">
+<title>Simulador REP Control iD 671</title>
+<style>body{font-family:system-ui;margin:32px;max-width:900px}code{background:#eee;padding:2px 5px;border-radius:4px}</style>
+<h1>Simulador REP Control iD 671</h1>
+<p>Servidor ativo. Use apenas para teste de comunicação com o IPM.</p>
+<p>Porta: <code>${port}</code> · Usuário: <code>${login}</code></p>
+<p><a href="/simulator/logs">Ver logs</a> · <a href="/simulator/state">Ver estado</a></p>`);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/simulator/logs') {
+      return json(res, 200, {count: recent.length, items: recent});
+    }
+
+    if (req.method === 'GET' && url.pathname === '/simulator/state') {
+      return json(res, 200, {
+        simulator: 'Control iD REP iDClass 671',
+        serial,
+        port,
+        user: login,
+        logFile
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/login.fcgi') {
+      if (body?.login !== login || body?.password !== password) {
+        return json(res, 401, {error:'invalid_credentials'});
+      }
+      return json(res, 200, {session:`SIM-${Date.now()}`});
+    }
+
+    if (req.method === 'POST' && url.pathname === '/session_is_valid.fcgi') {
+      return json(res, 200, {session_is_valid: validSession(url)});
+    }
+
+    if (req.method === 'POST' && url.pathname === '/logout.fcgi') {
+      res.writeHead(200); return res.end();
+    }
+
+    if (req.method === 'POST' && url.pathname === '/get_about.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      return json(res, 200, {
+        mac:'02:00:00:00:67:01',
+        nSerie:serial,
+        versionFW:260,
+        versionMRP:1,
+        isFacial:true
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/get_system_information.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      return json(res, 200, {
+        uptime:3600,
+        user_count:1,
+        number_of_faces:'1',
+        ticks:3600,
+        cuts:4,
+        coil_paper:80,
+        total_paper:100,
+        paper_ok:true,
+        low_paper:false,
+        memory:10,
+        used_mrp:1,
+        last_nsr:4
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/get_info.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      return json(res, 200, {
+        num_serie:serial,
+        user_count:1,
+        administrator_count:1,
+        template_count:0,
+        password_count:1,
+        bars_count:0,
+        rfid_count:1,
+        uptime:3600,
+        low_on_paper:false,
+        cuts:4,
+        total_printed:4
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/get_system_date_time.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      const d = new Date();
+      return json(res, 200, {
+        day:d.getDate(),
+        month:d.getMonth()+1,
+        year:d.getFullYear(),
+        hour:d.getHours(),
+        minute:d.getMinutes(),
+        second:d.getSeconds(),
+        timezone:'-0300'
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/load_users.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      return json(res, 200, {
+        users:[{
+          cpf:12345678909,
+          name:'USUARIO TESTE',
+          registration:'1',
+          rfid:1001,
+          code:1,
+          admin:false,
+          face:true,
+          image_timestamp:0
+        }]
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/load_company.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      return json(res, 200, {
+        company:{
+          name:'CAMARA TESTE',
+          address:'AMBIENTE DE SIMULACAO',
+          cpf:12345678909,
+          tipo_doc:1,
+          cpf_cnpj:'00000000000000',
+          cei:0
+        }
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/get_afd.fcgi') {
+      if (!validSession(url)) return json(res, 401, {error:'invalid_session'});
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const sample = [
+        '# SIMULACAO CONTROL ID 671 - NAO E AFD FISCAL',
+        `# DATA=${yyyy}-${mm}-${dd}`,
+        '# CPF_TESTE=12345678909',
+        '# NSR=1',
+        ''
+      ].join('\r\n');
+      return text(res, 200, sample);
+    }
+
+    return json(res, 501, {
+      error:'endpoint_not_implemented',
+      endpoint:url.pathname,
+      message:'A chamada foi registrada em /simulator/logs.'
+    });
+  } catch (err) {
+    json(res, 500, {error:'simulator_error', message:String(err?.message || err)});
+  }
+});
+
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Simulador HTTP Control iD 671 na porta ${port}`);
+  console.log(`Abra: http://localhost:${port}`);
+  console.log(`Logs: http://localhost:${port}/simulator/logs`);
+  console.log(`Usuario: ${login} | Senha: ${password}`);
+});
