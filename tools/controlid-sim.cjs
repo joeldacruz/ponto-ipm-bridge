@@ -1,4 +1,5 @@
 const http = require('node:http');
+const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
@@ -7,6 +8,8 @@ const port = Number(process.env.SIM_PORT || 3091);
 const login = process.env.SIM_USER || 'admin';
 const password = process.env.SIM_PASSWORD || 'admin';
 const serial = process.env.SIM_SERIAL || 'SIM671000001';
+const tlsPfx = process.env.SIM_TLS_PFX || '';
+const tlsPfxPassword = process.env.SIM_TLS_PFX_PASSWORD || '';
 const logDir = path.resolve(process.env.SIM_LOG_DIR || './data/simulator');
 fs.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, 'requests.ndjson');
@@ -87,7 +90,7 @@ function logRequest(req, url, body) {
   fs.appendFileSync(logFile, JSON.stringify(item) + '\n');
 }
 
-const server = http.createServer(async (req, res) => {
+const handler = async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const raw = await readBody(req);
@@ -249,7 +252,11 @@ const server = http.createServer(async (req, res) => {
   } catch (err) {
     json(res, 500, {error:'simulator_error', message:String(err?.message || err)});
   }
-});
+};
+
+const server = tlsPfx
+  ? https.createServer({ pfx: fs.readFileSync(tlsPfx), passphrase: tlsPfxPassword }, handler)
+  : http.createServer(handler);
 
 server.on('connection', (socket) => {
   const item = {
@@ -278,8 +285,9 @@ server.on('clientError', (err, socket) => {
 });
 
 server.listen(port, '0.0.0.0', () => {
-  console.log(`Simulador HTTP Control iD 671 na porta ${port}`);
-  console.log(`Abra: http://localhost:${port}`);
-  console.log(`Logs: http://localhost:${port}/simulator/logs`);
+  const scheme = tlsPfx ? 'https' : 'http';
+  console.log(`Simulador ${scheme.toUpperCase()} Control iD 671 na porta ${port}`);
+  console.log(`Abra: ${scheme}://localhost:${port}`);
+  console.log(`Logs: ${scheme}://localhost:${port}/simulator/logs`);
   console.log(`Usuario: ${login} | Senha: ${password}`);
 });
