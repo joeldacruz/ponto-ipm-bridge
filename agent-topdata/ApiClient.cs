@@ -43,6 +43,17 @@ namespace PontoCamara.TopdataAgent
             Post("/api/agent/jobs/" + jobId + "/result", _json.Serialize(result));
         }
 
+        public void SendEvents(string deviceId, TopdataEvent[] events)
+        {
+            if (events == null || events.Length == 0)
+                return;
+
+            EventBatch batch = new EventBatch();
+            batch.deviceId = deviceId;
+            batch.events = events;
+            Post("/api/agent/events", _json.Serialize(batch));
+        }
+
         private string Post(string path, string body)
         {
             return Send("POST", path, body);
