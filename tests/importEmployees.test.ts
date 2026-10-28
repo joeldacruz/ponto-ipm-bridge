@@ -197,7 +197,7 @@ test('proteção: servidor com vínculo IMPORTED e outro normal sincroniza só o
 test('regressão: vínculo normal continua sincronizando e servidor inexistente dá 404', async () => {
   wipe();
   await withApi(async (post) => {
-    const c = await post('/api/employees', { name: 'NOVO', registration: '5', deviceIds: [DEV] });
+    const c = await post('/api/employees', { name: 'NOVO', registration: '5', deviceEmployeeNo: '12345678901', deviceIds: [DEV] });
     assert.equal(c.status, 201); assert.equal(c.json.syncJobs.length, 1);
     const r = await post(`/api/employees/${c.json.id}/sync`);
     assert.equal(r.status, 200); assert.equal(r.json.jobs.length, 1);
@@ -300,6 +300,63 @@ test('caso real simulado: 24 servidores + 2 batidas Topdata de 12 posições →
     for (const e of emps) assert.equal((await post(`/api/employees/${e.id}/sync`)).status, 409);
   });
   assert.equal(count('sync_jobs'), 0);
+});
+
+test('cadastro: cpf, PIS (deviceEmployeeNo) e matrícula ficam independentes; zeros à esquerda preservados', async () => {
+  wipe();
+  await withApi(async (post) => {
+    const r = await post('/api/employees', { name: 'COM PIS', registration: '1234-00', cpf: '01234567890', deviceEmployeeNo: '00123456789', deviceIds: [DEV] });
+    assert.equal(r.status, 201);
+  });
+  const emp = db.prepare('SELECT * FROM employees').get() as any;
+  assert.equal(emp.cpf, '01234567890');                 // CPF na coluna de CPF, com zero à esquerda
+  assert.equal(emp.registration, '1234-00');            // matrícula independente
+  assert.equal(emp.device_employee_no, '00123456789');  // PIS como identificador central
+  const bind = db.prepare('SELECT * FROM employee_device_bindings').get() as any;
+  assert.equal(bind.device_employee_no, '00123456789'); // vínculo recebe o PIS, não o CPF
+  assert.notEqual(bind.device_employee_no, emp.cpf);
+  const job = JSON.parse((db.prepare('SELECT payload_json FROM sync_jobs').get() as any).payload_json);
+  assert.equal(job.binding.deviceEmployeeNo, '00123456789');
+  assert.equal(typeof job.binding.deviceEmployeeNo, 'string');
+});
+
+test('cadastro: REP Topdata exige PIS/PASEP (não usa CPF nem matrícula no lugar) e nada é gravado', async () => {
+  wipe();
+  await withApi(async (post) => {
+    const r = await post('/api/employees', { name: 'SEM PIS', registration: '9', cpf: '12345678901', deviceIds: [DEV] });
+    assert.equal(r.status, 400); assert.match(r.json.error, /PIS\/PASEP/);
+  });
+  assert.equal(count('employees'), 0); assert.equal(count('employee_device_bindings'), 0); assert.equal(count('sync_jobs'), 0);
+});
+
+test('cadastro: REP não-Topdata continua aceitando matrícula/CPF sem PIS', async () => {
+  wipe();
+  db.prepare(`INSERT OR IGNORE INTO devices(id,name,vendor,role,transport) VALUES('rep-outro','REP Outro','ACME','PRIMARY','DIRECT')`).run();
+  await withApi(async (post) => {
+    const r = await post('/api/employees', { name: 'OUTRO REP', registration: '77', deviceIds: ['rep-outro'] });
+    assert.equal(r.status, 201);
+  });
+  assert.equal((db.prepare('SELECT device_employee_no AS n FROM employee_device_bindings').get() as any).n, '77');
+});
+
+test('cadastro: valores numéricos (perdem zeros) e tamanhos inválidos são recusados', async () => {
+  wipe();
+  await withApi(async (post) => {
+    assert.equal((await post('/api/employees', { name: 'X', deviceEmployeeNo: 12345678901, deviceIds: [DEV] })).status, 400);
+    assert.equal((await post('/api/employees', { name: 'X', cpf: 12345678901, deviceEmployeeNo: '12345678901' })).status, 400);
+    assert.equal((await post('/api/employees', { name: 'X', cpf: '123', deviceEmployeeNo: '12345678901' })).status, 400);
+    assert.equal((await post('/api/employees', { name: 'X', deviceEmployeeNo: '123' })).status, 400);
+  });
+  assert.equal(count('employees'), 0);
+});
+
+test('cadastro não altera device_events existentes', async () => {
+  wipe(); addRawEvent('012345678901', 500, 'LINHA-AFD');
+  const antes = snapshot(); const fp = eventsFingerprint(db);
+  await withApi(async (post) => {
+    assert.equal((await post('/api/employees', { name: 'NOVO', deviceEmployeeNo: '12345678901', deviceIds: [DEV] })).status, 201);
+  });
+  assert.deepEqual(snapshot(), antes); assert.equal(eventsFingerprint(db), fp);
 });
 
 test('CLI: simulação não grava; --apply faz backup com SHA-256 e não cria sync_jobs', () => {

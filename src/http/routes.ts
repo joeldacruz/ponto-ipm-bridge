@@ -84,6 +84,21 @@ router.post('/api/employees', (req, res) => {
     return res.status(400).json({ error: 'name e pelo menos matrícula, CPF ou deviceEmployeeNo são obrigatórios' });
   }
 
+  // Identificadores numéricos precisam chegar como string (número já teria perdido os zeros à esquerda).
+  for (const [field, value] of [['cpf', cpf], ['deviceEmployeeNo', deviceEmployeeNo], ['registration', registration]] as const) {
+    if (value != null && typeof value !== 'string') return res.status(400).json({ error: `${field} deve ser enviado como texto` });
+  }
+  if (cpf && !/^\d{11}$/.test(cpf)) return res.status(400).json({ error: 'cpf deve ter 11 dígitos numéricos' });
+  if (deviceEmployeeNo && !/^\d{11}$/.test(deviceEmployeeNo)) {
+    return res.status(400).json({ error: 'deviceEmployeeNo (PIS/PASEP) deve ter 11 dígitos numéricos' });
+  }
+  // O REP Topdata identifica o servidor pelo PIS/PASEP: não se usa CPF nem matrícula no lugar dele.
+  const ids: string[] = Array.isArray(deviceIds) ? deviceIds : [];
+  if (!deviceEmployeeNo && ids.length) {
+    const topdata = db.prepare(`SELECT 1 FROM devices WHERE id IN (${ids.map(() => '?').join(',')}) AND upper(vendor)='TOPDATA'`).get(...ids);
+    if (topdata) return res.status(400).json({ error: 'Informe o PIS/PASEP (deviceEmployeeNo) para cadastrar este servidor no REP Topdata.' });
+  }
+
   const result = db.prepare(`
     INSERT INTO employees(name,cpf,registration,device_employee_no)
     VALUES(?,?,?,?)

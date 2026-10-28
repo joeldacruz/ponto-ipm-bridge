@@ -133,11 +133,14 @@
     .actions{display:flex;gap:6px;justify-content:flex-end}
 
     /* Formulário */
-    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px}
+    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:16px}
     .field label,.field .lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2)}
     input[type=text],input:not([type]),input[inputmode]{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
     input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
     input::placeholder{color:#9aa6a1}
+    input.invalid{border-color:var(--bad);box-shadow:0 0 0 3px rgba(166,58,50,.12)}
+    .hint{display:block;margin-top:5px;font-size:12px;font-weight:400;color:var(--muted);min-height:16px}
+    .hint.err{color:var(--bad)}
     .devpick{margin-top:18px}
     .devpick .lbl{font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:8px}
     #deviceChecks{display:flex;gap:10px;flex-wrap:wrap}
@@ -156,7 +159,7 @@
     .toast[hidden]{display:none}
 
     /* Responsivo */
-    @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:1fr 1fr}.formgrid .field:first-child{grid-column:1/-1}}
+    @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:repeat(3,1fr)}.formgrid .field:first-child{grid-column:1/-1}}
     @media(max-width:760px){
       .topbar .in,header.site .in,nav.sub .in,main,footer.site{padding-left:16px;padding-right:16px}
       .topbar .in span:last-child{display:none}
@@ -297,7 +300,8 @@
         <div class="formgrid">
           <div class="field"><label>Nome<input id="empName" required placeholder="Nome completo" autocomplete="off"></label></div>
           <div class="field"><label>Matrícula<input id="empRegistration" placeholder="Ex.: 3026" autocomplete="off"></label></div>
-          <div class="field"><label>CPF<input id="empCpf" inputmode="numeric" placeholder="Somente números" autocomplete="off"></label></div>
+          <div class="field"><label>CPF<input id="empCpf" inputmode="numeric" placeholder="Somente números" autocomplete="off" aria-describedby="empCpfHint"></label><span class="hint" id="empCpfHint"></span></div>
+          <div class="field"><label>PIS/PASEP<input id="empPis" inputmode="numeric" placeholder="Somente números" autocomplete="off" aria-describedby="empPisHint"></label><span class="hint" id="empPisHint"></span></div>
         </div>
         <div class="devpick">
           <div class="lbl">Enviar cadastro para</div>
@@ -305,7 +309,7 @@
         </div>
         <div class="formfoot">
           <button class="btn" type="submit"><svg><use href="#i-plus"/></svg>Cadastrar servidor</button>
-          <span class="muted" style="font-size:13px">Informe ao menos matrícula ou CPF.</span>
+          <span class="muted" style="font-size:13px">Informe ao menos matrícula, CPF ou PIS/PASEP.</span>
         </div>
       </form>
     </div>
@@ -423,7 +427,7 @@ async function load(){
     </tr>`).join(''):'<tr><td colspan="8" class="empty">Nenhum REP cadastrado.</td></tr>';
 
   document.getElementById('deviceChecks').innerHTML=devices.filter(d=>d.active).map(d=>`
-    <label class="check"><input type="checkbox" name="deviceId" value="${esc(d.id)}">
+    <label class="check"><input type="checkbox" name="deviceId" value="${esc(d.id)}" data-vendor="${esc(String(d.vendor||'').toUpperCase())}">
       <span>${esc(d.name)} <span class="muted">(${d.role==='PRIMARY'?'Principal':'Secundário'})</span></span>
     </label>`).join('') || '<span class="muted">Cadastre um REP antes de vincular servidores.</span>';
 
@@ -454,6 +458,34 @@ async function syncEmployee(id,btn){
   }catch(err){ toast('Falha ao enfileirar sincronização.'); btn.disabled=false; }
 }
 
+const onlyDigits=(v)=>String(v??'').replace(/\D/g,'');
+const topdataSelected=()=>[...document.querySelectorAll('input[name="deviceId"]:checked')].some(x=>x.dataset.vendor==='TOPDATA');
+function setHint(inputId,hintId,msg){
+  document.getElementById(inputId).classList.toggle('invalid',!!msg);
+  const h=document.getElementById(hintId);h.textContent=msg||'';h.classList.toggle('err',!!msg);
+}
+// Validação amigável; devolve a mensagem do primeiro problema (ou '' se estiver tudo certo).
+function validateEmployeeForm(p){
+  const cpfErr=p.cpf&&p.cpf.length!==11?'O CPF deve ter 11 dígitos.':'';
+  const pisErr=p.deviceEmployeeNo&&p.deviceEmployeeNo.length!==11?'O PIS/PASEP deve ter 11 dígitos.':'';
+  const topErr=!p.deviceEmployeeNo&&topdataSelected()?'Informe o PIS/PASEP para cadastrar este servidor no REP Topdata.':'';
+  setHint('empCpf','empCpfHint',cpfErr);
+  setHint('empPis','empPisHint',pisErr||topErr);
+  if(cpfErr||pisErr||topErr) return cpfErr||pisErr||topErr;
+  if(!p.registration&&!p.cpf&&!p.deviceEmployeeNo) return 'Informe matrícula, CPF ou PIS/PASEP.';
+  return '';
+}
+// campos numéricos: só dígitos, até 11 (aceita colar "123.456.789-01")
+['empCpf','empPis'].forEach(id=>document.getElementById(id).addEventListener('input',e=>{
+  e.target.value=onlyDigits(e.target.value).slice(0,11);
+  e.target.classList.remove('invalid');
+  document.getElementById(id+'Hint').textContent='';
+}));
+// ao marcar/desmarcar o REP Topdata, avisa que o PIS/PASEP passa a ser obrigatório
+document.getElementById('deviceChecks').addEventListener('change',()=>{
+  const hint=document.getElementById('empPisHint');
+  if(!hint.classList.contains('err')) hint.textContent=topdataSelected()?'Obrigatório para o REP Topdata.':'';
+});
 document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
   const status=document.getElementById('formStatus');
@@ -461,11 +493,13 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   const payload={
     name:document.getElementById('empName').value.trim(),
     registration:document.getElementById('empRegistration').value.trim()||null,
-    cpf:document.getElementById('empCpf').value.replace(/\D/g,'')||null,
+    cpf:onlyDigits(document.getElementById('empCpf').value)||null,       // texto: preserva zeros à esquerda
+    deviceEmployeeNo:onlyDigits(document.getElementById('empPis').value)||null, // PIS/PASEP, identificador do REP
     deviceIds
   };
-  if(!payload.registration && !payload.cpf){
-    status.textContent='Informe matrícula ou CPF.';
+  const problem=validateEmployeeForm(payload);
+  if(problem){
+    status.textContent=problem;
     return;
   }
   status.textContent='Salvando...';
@@ -477,6 +511,7 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   }
   status.textContent='Servidor cadastrado. '+(body.syncJobs?.length?body.syncJobs.length+' sincronização(ões) enfileirada(s).':'Sem REP selecionado.');
   ev.target.reset();
+  setHint('empCpf','empCpfHint','');setHint('empPis','empPisHint','');
   await load();
 });
 
