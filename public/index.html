@@ -497,11 +497,10 @@ function validateEmployeeForm(p){
   const pisErr=p.deviceEmployeeNo&&p.deviceEmployeeNo.length!==11?'O PIS/PASEP deve ter 11 dígitos.':'';
   const pinErr=p.pin&&p.pin.length!==4?'O PIN deve ter exatamente 4 dígitos.':'';
   const topErr=!p.deviceEmployeeNo&&topdataSelected()?'Informe o PIS/PASEP para cadastrar este servidor no REP Topdata.':'';
-  const topPinErr=!p.pin&&topdataSelected()?'Informe o PIN de 4 dígitos para o REP Topdata.':'';
   setHint('empCpf','empCpfHint',cpfErr);
   setHint('empPis','empPisHint',pisErr||topErr);
-  setHint('empPin','empPinHint',pinErr||topPinErr);
-  if(cpfErr||pisErr||pinErr||topErr||topPinErr) return cpfErr||pisErr||pinErr||topErr||topPinErr;
+  setHint('empPin','empPinHint',pinErr);
+  if(cpfErr||pisErr||pinErr||topErr) return cpfErr||pisErr||pinErr||topErr;
   if(!p.registration&&!p.cpf&&!p.deviceEmployeeNo) return 'Informe matrícula, CPF ou PIS/PASEP.';
   return '';
 }
@@ -518,7 +517,7 @@ document.getElementById('deviceChecks').addEventListener('change',()=>{
   const pisHint=document.getElementById('empPisHint');
   const pinHint=document.getElementById('empPinHint');
   if(!pisHint.classList.contains('err')) pisHint.textContent=selected?'Obrigatório para o REP Topdata.':'';
-  if(!pinHint.classList.contains('err')) pinHint.textContent=selected?'Obrigatório para o REP Topdata.':'';
+  if(!pinHint.classList.contains('err')) pinHint.textContent=selected?'Pode ser definido agora ou depois, antes do envio ao REP.':'';
 });
 document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
