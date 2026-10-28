@@ -117,6 +117,11 @@ Acesse `http://localhost:3090`.
 
 ## Segurança e auditoria
 
+- o PIN de ponto do servidor é armazenado cifrado com AES-256-GCM usando `PIN_ENCRYPTION_KEY`;
+- a API de listagem nunca retorna PIN, ciphertext, IV ou tag;
+- o PIN em claro só é materializado em memória ao entregar um job autenticado ao agente;
+- `sync_jobs.payload_json` não armazena o PIN em claro;
+- alterações de PIN geram auditoria sem registrar o valor;
 - nunca versionar senha/chave de REP;
 - usar `AGENT_TOKEN` forte em produção;
 - manter comunicação dos equipamentos em rede interna;
