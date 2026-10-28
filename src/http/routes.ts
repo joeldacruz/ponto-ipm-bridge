@@ -118,10 +118,6 @@ router.post('/api/employees', (req, res) => {
   if (!deviceEmployeeNo && hasTopdata) {
     return res.status(400).json({ error: 'Informe o PIS/PASEP (deviceEmployeeNo) para cadastrar este servidor no REP Topdata.' });
   }
-  if (hasTopdata && !pin) {
-    return res.status(400).json({ error: 'Informe o PIN de 4 dígitos para cadastrar este servidor no REP Topdata.' });
-  }
-
   let encryptedPin: ReturnType<typeof encryptPin> | null = null;
   try {
     if (pin) encryptedPin = encryptPin(pin);
