@@ -3,94 +3,423 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ponto Câmara</title>
+  <meta name="theme-color" content="#14402f" />
+  <title>Ponto Eletrônico · Câmara Municipal de Três Barras</title>
   <style>
-    :root{font-family:Inter,system-ui,Arial,sans-serif;color:#182230;background:#f5f7fa}
-    *{box-sizing:border-box}body{margin:0}.wrap{max-width:1180px;margin:auto;padding:28px}
-    h1{margin:0 0 4px;font-size:28px}.muted{color:#667085}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:22px 0}
-    .card{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:18px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
-    .kpi{font-size:30px;font-weight:700;margin-top:8px}.tag{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef2f6;font-size:12px}
-    .online{background:#ecfdf3}.offline{background:#fef3f2}.primary{background:#eff8ff}.secondary{background:#f9f5ff}
-    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eef1f4;font-size:14px}th{color:#667085}
-    code{background:#f2f4f7;padding:2px 5px;border-radius:4px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    button{border:0;border-radius:9px;padding:9px 12px;cursor:pointer}.btn{background:#182230;color:#fff}
-    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}.formgrid label{font-size:13px;color:#475467}
-    input{display:block;width:100%;margin-top:6px;padding:10px 11px;border:1px solid #d0d5dd;border-radius:9px;font:inherit;color:#182230;background:#fff}
-    .check{display:flex;gap:7px;align-items:center;border:1px solid #e4e7ec;border-radius:9px;padding:8px 10px}.check input{width:auto;margin:0}
-    @media(max-width:720px){.formgrid{grid-template-columns:1fr}}
+    :root{
+      --font:Inter,"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+      --ink:#14212b;--ink-2:#44525e;--muted:#6b7886;
+      --bg:#f3f5f4;--surface:#fff;--line:#e3e8e6;--line-2:#eef2f0;
+      --brand:#14402f;--brand-2:#1d5a42;--brand-soft:#e8f1ed;
+      --gold:#a97d1c;--gold-soft:#fbf4e1;
+      --ok:#17693f;--ok-soft:#e6f4ec;
+      --bad:#a63a32;--bad-soft:#fbeceb;
+      --warn:#8a5a0b;--warn-soft:#fdf3dd;
+      --info:#1f4f86;--info-soft:#e9f0f9;
+      --radius:12px;--shadow:0 1px 2px rgba(20,33,43,.05),0 4px 14px rgba(20,33,43,.04);
+    }
+    *{box-sizing:border-box}
+    html{-webkit-text-size-adjust:100%}
+    body{margin:0;font-family:var(--font);color:var(--ink);background:var(--bg);line-height:1.45;-webkit-font-smoothing:antialiased}
+    svg{width:1em;height:1em;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    .muted{color:var(--muted)}
+    .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+    /* Cabeçalho */
+    .topbar{background:var(--brand);color:#fff;font-size:12px;letter-spacing:.02em}
+    .topbar .in{max-width:1240px;margin:auto;padding:6px 24px;display:flex;justify-content:space-between;gap:12px;opacity:.9}
+    header.site{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;box-shadow:0 1px 0 rgba(20,33,43,.03)}
+    header.site .in{max-width:1240px;margin:auto;padding:10px 24px;display:flex;align-items:center;gap:16px}
+    .brand{display:flex;align-items:center;gap:14px;min-width:0;text-decoration:none;color:inherit}
+    .crest{width:52px;height:56px;flex:none;display:grid;place-items:center}
+    .crest img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+    .crest-ph{width:48px;height:54px;border:1.5px dashed #b8c2bd;border-radius:10px 10px 22px 22px;display:grid;place-items:center;color:#8a9892;font-size:20px;background:#f8faf9}
+    .brand-text{min-width:0}
+    .brand-text .org{font-size:12px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.08em}
+    .brand-text .name{font-size:19px;font-weight:700;color:var(--brand);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .brand-text .sys{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+    .brand-text .sys i{width:5px;height:5px;border-radius:50%;background:var(--gold);display:inline-block}
+    .spacer{flex:1}
+    .user{display:flex;align-items:center;gap:10px;padding:5px 12px 5px 6px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+    .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-size:17px}
+    .user b{display:block;font-size:13px;line-height:1.2}.user div span{display:block;font-size:11.5px;color:var(--muted);line-height:1.2}
+
+    /* Navegação */
+    nav.sub{background:var(--surface);border-bottom:1px solid var(--line)}
+    nav.sub .in{max-width:1240px;margin:auto;padding:0 24px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+    nav.sub .in::-webkit-scrollbar{display:none}
+    nav.sub a{padding:12px 14px;font-size:13.5px;font-weight:500;color:var(--ink-2);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap;display:flex;gap:7px;align-items:center}
+    nav.sub a:hover{color:var(--brand)}
+    nav.sub a.on{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+
+    /* Layout */
+    main{max-width:1240px;margin:auto;padding:24px 24px 40px}
+    .pagehead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+    .pagehead h1{margin:0;font-size:24px;letter-spacing:-.01em}
+    .pagehead p{margin:3px 0 0;font-size:14px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:9px;padding:9px 15px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;transition:background .15s,border-color .15s}
+    .btn:hover{background:var(--brand-2)}
+    .btn:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid rgba(29,90,66,.28);outline-offset:1px}
+    .btn.ghost{background:var(--surface);color:var(--brand);border-color:#cfd9d4}
+    .btn.ghost:hover{background:var(--brand-soft)}
+    .btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
+    .btn[disabled]{opacity:.6;cursor:wait}
+    .btn.busy svg{animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @media (prefers-reduced-motion:reduce){.btn.busy svg{animation:none}}
+
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:18px;overflow:hidden}
+    .panel-h{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px;border-bottom:1px solid var(--line-2)}
+    .panel-h h2{margin:0;font-size:16px;display:flex;align-items:center;gap:9px}
+    .panel-h h2 svg{color:var(--brand);font-size:18px}
+    .panel-b{padding:20px}
+    .count{font-size:12px;font-weight:600;color:var(--muted);background:var(--line-2);padding:2px 9px;border-radius:999px}
+
+    /* Alertas */
+    #alerts{display:grid;gap:10px;margin-bottom:16px}
+    #alerts:empty{display:none}
+    .alert{display:flex;gap:11px;align-items:flex-start;padding:11px 14px;border-radius:10px;font-size:13.5px;border:1px solid}
+    .alert svg{font-size:18px;margin-top:1px}
+    .alert.bad{background:var(--bad-soft);border-color:#f0cfcc;color:#7d2a24}
+    .alert.warn{background:var(--warn-soft);border-color:#f1deb0;color:#6e4707}
+
+    /* KPIs */
+    .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+    .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);display:flex;gap:14px;align-items:flex-start}
+    .kpi .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:20px;background:var(--brand-soft);color:var(--brand);flex:none}
+    .kpi .lb{font-size:12.5px;font-weight:500;color:var(--muted)}
+    .kpi .vl{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-top:2px}
+    .kpi .sb{font-size:12px;color:var(--muted);margin-top:2px}
+    .kpi.lead{grid-column:span 2;background:linear-gradient(180deg,#fff,#f7faf8)}
+    .kpi.ok .ic{background:var(--ok-soft);color:var(--ok)}
+    .kpi.warn .ic{background:var(--warn-soft);color:var(--warn)}
+    .kpi.info .ic{background:var(--info-soft);color:var(--info)}
+    .kpi.gold .ic{background:var(--gold-soft);color:var(--gold)}
+    .kpi.bad .ic{background:var(--bad-soft);color:var(--bad)}
+    .split{display:flex;gap:18px;margin-top:6px}
+    .split b{font-size:22px;font-weight:700;display:block;line-height:1.1}
+    .split span{font-size:12px;color:var(--muted)}
+    .split .on b{color:var(--ok)}.split .off b{color:var(--bad)}
+
+    /* Badges */
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;border:1px solid transparent}
+    .badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+    .badge.online{background:var(--ok-soft);color:var(--ok);border-color:#cde8d8}
+    .badge.offline{background:var(--bad-soft);color:var(--bad);border-color:#f0cfcc}
+    .badge.unknown{background:var(--line-2);color:var(--muted);border-color:var(--line)}
+    .badge.primary{background:var(--brand);color:#fff}
+    .badge.secondary{background:var(--gold-soft);color:var(--gold);border-color:#ecd9a5}
+    .badge.pending{background:var(--warn-soft);color:var(--warn);border-color:#f1deb0}
+    .badge.done{background:var(--ok-soft);color:var(--ok);border-color:#cde8d8}
+    .badge.error{background:var(--bad-soft);color:var(--bad);border-color:#f0cfcc}
+    .badge.leased{background:var(--info-soft);color:var(--info);border-color:#cbdcf0}
+    .chip{display:inline-block;padding:2px 9px;border-radius:7px;background:var(--line-2);font-size:12.5px;color:var(--ink-2);border:1px solid var(--line)}
+    .chips{display:flex;flex-wrap:wrap;gap:6px}
+
+    /* Tabelas */
+    .tw{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    th{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:#f8faf9;text-align:left;padding:10px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+    td{padding:13px 16px;border-bottom:1px solid var(--line-2);font-size:14px;vertical-align:middle}
+    tbody tr:last-child td{border-bottom:0}
+    tbody tr:hover{background:#fafcfb}
+    tr.is-primary td:first-child{box-shadow:inset 3px 0 0 var(--brand)}
+    tr.is-secondary td:first-child{box-shadow:inset 3px 0 0 #d9b95e}
+    .t-name{font-weight:600}.t-sub{font-size:12.5px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+    td.empty{text-align:center;color:var(--muted);padding:34px 16px}
+    td.num{font-variant-numeric:tabular-nums}
+    .actions{display:flex;gap:6px;justify-content:flex-end}
+
+    /* Formulário */
+    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px}
+    .field label,.field .lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2)}
+    input[type=text],input:not([type]),input[inputmode]{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
+    input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
+    input::placeholder{color:#9aa6a1}
+    .devpick{margin-top:18px}
+    .devpick .lbl{font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:8px}
+    #deviceChecks{display:flex;gap:10px;flex-wrap:wrap}
+    .check{display:flex;gap:9px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 13px;cursor:pointer;background:#fff;font-size:14px;font-weight:500}
+    .check:hover{border-color:#b9c7c0;background:#fafcfb}
+    .check input{width:17px;height:17px;margin:0;accent-color:var(--brand)}
+    .check:has(input:checked){border-color:var(--brand-2);background:var(--brand-soft)}
+    .formfoot{display:flex;align-items:center;gap:14px;margin-top:20px;flex-wrap:wrap}
+    #formStatus{font-size:13.5px}
+
+    .note{margin-top:18px;display:flex;gap:12px;align-items:flex-start;padding:14px 18px;background:var(--brand-soft);border:1px solid #cfe1d8;border-radius:var(--radius);font-size:13.5px;color:#27493b}
+    .note svg{font-size:18px;color:var(--brand);margin-top:1px}
+    footer.site{max-width:1240px;margin:auto;padding:0 24px 30px;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+    .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:50;max-width:calc(100% - 32px)}
+    .toast[hidden]{display:none}
+
+    /* Responsivo */
+    @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:1fr 1fr}.formgrid .field:first-child{grid-column:1/-1}}
+    @media(max-width:760px){
+      .topbar .in,header.site .in,nav.sub .in,main,footer.site{padding-left:16px;padding-right:16px}
+      .topbar .in span:last-child{display:none}
+      .crest{width:40px;height:44px}.crest-ph{width:38px;height:44px}
+      .brand-text .org{font-size:10.5px}.brand-text .name{font-size:15.5px;white-space:normal}
+      .brand-text .sys{font-size:12px}
+      .user div{display:none}.user{padding:3px}
+      .kpis{gap:10px}
+      .kpi{padding:13px;gap:10px;flex-direction:column}.kpi .vl{font-size:24px}
+      .formgrid{grid-template-columns:1fr}
+      .pagehead h1{font-size:21px}
+      .pagehead .btn{width:100%}
+      .panel-b{padding:16px}
+      /* tabelas viram cartões */
+      .tw{overflow:visible}
+      table.cards,table.cards tbody,table.cards tr,table.cards td{display:block;width:100%}
+      table.cards thead{display:none}
+      table.cards tbody tr{padding:12px 14px;border-bottom:1px solid var(--line)}
+      table.cards tbody tr:last-child{border-bottom:0}
+      table.cards td{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:6px 0;border:0;text-align:right}
+      table.cards td::before{content:attr(data-label);flex:none;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding-top:2px}
+      table.cards td.cell-title{display:block;text-align:left;padding-bottom:8px}
+      table.cards td.cell-title::before{display:none}
+      table.cards td.empty{display:block;text-align:center}
+      table.cards td.empty::before{display:none}
+      table.cards .chips{justify-content:flex-end}
+      table.cards .actions{width:100%;justify-content:stretch}table.cards .actions .btn{flex:1}
+      tr.is-primary,tr.is-secondary{border-left:3px solid var(--brand)}
+      tr.is-secondary{border-left-color:#d9b95e}
+      tr.is-primary td:first-child,tr.is-secondary td:first-child{box-shadow:none}
+    }
+    @media(max-width:380px){.kpis{grid-template-columns:1fr}.kpi.lead{grid-column:span 1}}
   </style>
 </head>
-<body><div class="wrap">
-  <div class="row" style="justify-content:space-between">
-    <div><h1>Ponto Câmara</h1><div class="muted">Coleta multi-REP e integração com IPM</div></div>
-    <button class="btn" onclick="load()">Atualizar</button>
-  </div>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M9 8h6M9 12h6M11 17h2"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 16a5 5 0 0 1 6.4 0"/><circle cx="12" cy="19.2" r=".6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></symbol>
+    <symbol id="i-fingerprint" viewBox="0 0 24 24"><path d="M6 11a6 6 0 0 1 12 0c0 3 0 5-1 8M9 20c1-2 1.5-4 1.5-6.5a1.5 1.5 0 0 1 3 0c0 3-.5 5.500-1.500 7.500M3.500 14.500c.5-1 .7-2.200.5-3.500M15 15c0 2-.3 3.500-1 5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.500-4M4 4v4h4M4 13a8 8 0 0 0 14.500 4M20 20v-4h-4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.500 2.500 20h19L12 3.500ZM12 10v4.500M12 17.500v.1"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-sync" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.500-5.800L20 8.500M20 4v4.500h-4.500M20 12a8 8 0 0 1-13.500 5.800L4 15.500M4 20v-4.500h4.500"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.500" y="3.500" width="7" height="7" rx="1.500"/><rect x="13.500" y="3.500" width="7" height="7" rx="1.500"/><rect x="3.500" y="13.500" width="7" height="7" rx="1.500"/><rect x="13.500" y="13.500" width="7" height="7" rx="1.500"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.500 6v5.500c0 4.500 3 8 7.500 9.500 4.500-1.500 7.500-5 7.500-9.500V6L12 3Z"/><path d="m9 12 2.200 2.200L15.500 10"/></symbol>
+  </defs>
+</svg>
 
-  <div class="grid">
-    <div class="card"><div class="muted">Equipamentos</div><div class="kpi" id="devicesCount">—</div></div>
-    <div class="card"><div class="muted">REPs online</div><div class="kpi" id="onlineCount">—</div></div>
-    <div class="card"><div class="muted">Servidores</div><div class="kpi" id="employeesCount">—</div></div>
-    <div class="card"><div class="muted">Batidas coletadas</div><div class="kpi" id="eventsCount">—</div></div>
-  </div>
+<div class="topbar"><div class="in"><span>Estado de Santa Catarina</span><span>Sistema interno de controle de frequência</span></div></div>
 
-  <div class="card">
-    <h2>Equipamentos</h2>
-    <table><thead><tr><th>Função</th><th>Equipamento</th><th>Fabricante</th><th>Endereço</th><th>Status</th><th>Último NSR</th><th>Batidas</th></tr></thead>
-    <tbody id="devices"><tr><td colspan="7" class="muted">Carregando...</td></tr></tbody></table>
-  </div>
-
-  <div class="card">
-    <div class="row" style="justify-content:space-between">
-      <h2 style="margin:0">Novo servidor</h2>
-      <span class="muted" id="formStatus"></span>
+<header class="site">
+  <div class="in">
+    <a class="brand" href="/" aria-label="Câmara Municipal de Três Barras — Ponto Eletrônico">
+      <!-- Brasão: coloque o arquivo oficial em /public/brasao.png. Enquanto não existir, o placeholder neutro é exibido. -->
+      <span class="crest" id="crest">
+        <img src="/brasao.png" alt="Brasão de Três Barras" id="crestImg" onerror="this.parentNode.innerHTML='<span class=crest-ph title=&quot;Coloque o brasão oficial em /public/brasao.png&quot;><svg><use href=&quot;#i-shield&quot;/></svg></span>'">
+      </span>
+      <span class="brand-text">
+        <span class="org">Três Barras · SC</span>
+        <span class="name">Câmara Municipal de Três Barras</span>
+        <span class="sys"><i></i>Ponto Eletrônico</span>
+      </span>
+    </a>
+    <div class="spacer"></div>
+    <div class="user" title="Perfil do usuário">
+      <span class="avatar"><svg><use href="#i-user"/></svg></span>
+      <div><b>Administração</b><span>Ponto Eletrônico</span></div>
     </div>
-    <form id="employeeForm" style="margin-top:16px">
-      <div class="formgrid">
-        <label>Nome<input id="empName" required placeholder="Nome completo"></label>
-        <label>Matrícula<input id="empRegistration" placeholder="Ex.: 3026"></label>
-        <label>CPF<input id="empCpf" inputmode="numeric" placeholder="Somente números"></label>
-      </div>
-      <div style="margin-top:14px">
-        <div class="muted" style="margin-bottom:8px">Enviar cadastro para</div>
-        <div id="deviceChecks" class="row"></div>
-      </div>
-      <div style="margin-top:16px"><button class="btn" type="submit">Cadastrar servidor</button></div>
-    </form>
+  </div>
+</header>
+
+<nav class="sub" aria-label="Seções">
+  <div class="in">
+    <a href="#painel" class="on"><svg><use href="#i-grid"/></svg>Painel</a>
+    <a href="#equipamentos"><svg><use href="#i-device"/></svg>Equipamentos</a>
+    <a href="#novo-servidor"><svg><use href="#i-plus"/></svg>Novo servidor</a>
+    <a href="#servidores"><svg><use href="#i-users"/></svg>Servidores</a>
+  </div>
+</nav>
+
+<main>
+  <div class="pagehead" id="painel">
+    <div>
+      <h1>Painel de coleta</h1>
+      <p class="muted">Coleta multi-REP e integração com IPM</p>
+    </div>
+    <button class="btn" id="btnRefresh" onclick="load()"><svg><use href="#i-refresh"/></svg>Atualizar</button>
   </div>
 
-  <div class="card">
-    <h2>Servidores</h2>
-    <table><thead><tr><th>Nome</th><th>Matrícula</th><th>CPF</th><th>REPs vinculados</th><th>Sincronização</th></tr></thead>
-    <tbody id="employees"><tr><td colspan="5" class="muted">Carregando...</td></tr></tbody></table>
-  </div>
+  <div id="alerts" role="status"></div>
 
-  <div class="card">
-    <strong>Regra do projeto</strong>
-    <p class="muted">O REP é a fonte da marcação original. O Ponto Câmara coleta e administra; o IPM continua responsável por jornada, banco de horas, justificativas e fechamento.</p>
+  <section class="kpis" aria-label="Indicadores">
+    <div class="kpi lead">
+      <span class="ic"><svg><use href="#i-wifi"/></svg></span>
+      <div>
+        <div class="lb">REPs online / offline</div>
+        <div class="split">
+          <div class="on"><b id="onlineCount">—</b><span>online</span></div>
+          <div class="off"><b id="offlineCount">—</b><span>offline</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="kpi info"><span class="ic"><svg><use href="#i-device"/></svg></span>
+      <div><div class="lb">REPs cadastrados</div><div class="vl" id="devicesCount">—</div></div></div>
+    <div class="kpi"><span class="ic"><svg><use href="#i-users"/></svg></span>
+      <div><div class="lb">Servidores cadastrados</div><div class="vl" id="employeesCount">—</div></div></div>
+    <div class="kpi gold"><span class="ic"><svg><use href="#i-fingerprint"/></svg></span>
+      <div><div class="lb">Marcações coletadas</div><div class="vl" id="eventsCount">—</div></div></div>
+    <div class="kpi warn" id="pendingKpi"><span class="ic"><svg><use href="#i-sync"/></svg></span>
+      <div><div class="lb">Sincronizações pendentes</div><div class="vl" id="pendingCount">—</div></div></div>
+  </section>
+
+  <section class="panel" id="equipamentos">
+    <div class="panel-h">
+      <h2><svg><use href="#i-device"/></svg>Equipamentos (REPs)</h2>
+      <span class="count" id="devicesTotal"></span>
+    </div>
+    <div class="tw">
+      <table class="cards">
+        <thead><tr><th>Função</th><th>Equipamento</th><th>Fabricante</th><th>Endereço IP</th><th>Status</th><th>Último NSR</th><th>Batidas</th><th>Última comunicação</th></tr></thead>
+        <tbody id="devices"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="novo-servidor">
+    <div class="panel-h">
+      <h2><svg><use href="#i-plus"/></svg>Novo servidor</h2>
+      <span class="muted" id="formStatus" role="status"></span>
+    </div>
+    <div class="panel-b">
+      <form id="employeeForm">
+        <div class="formgrid">
+          <div class="field"><label>Nome<input id="empName" required placeholder="Nome completo" autocomplete="off"></label></div>
+          <div class="field"><label>Matrícula<input id="empRegistration" placeholder="Ex.: 3026" autocomplete="off"></label></div>
+          <div class="field"><label>CPF<input id="empCpf" inputmode="numeric" placeholder="Somente números" autocomplete="off"></label></div>
+        </div>
+        <div class="devpick">
+          <div class="lbl">Enviar cadastro para</div>
+          <div id="deviceChecks"></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" type="submit"><svg><use href="#i-plus"/></svg>Cadastrar servidor</button>
+          <span class="muted" style="font-size:13px">Informe ao menos matrícula ou CPF.</span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel" id="servidores">
+    <div class="panel-h">
+      <h2><svg><use href="#i-users"/></svg>Servidores</h2>
+      <span class="count" id="employeesTotal"></span>
+    </div>
+    <div class="tw">
+      <table class="cards">
+        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>REPs vinculados</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
+        <tbody id="employees"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="note">
+    <svg><use href="#i-info"/></svg>
+    <div><strong>Regra do projeto.</strong> O REP é a fonte da marcação original. O Ponto Eletrônico coleta e administra; o IPM continua responsável por jornada, banco de horas, justificativas e fechamento.</div>
   </div>
-</div>
+</main>
+
+<footer class="site"><span>Câmara Municipal de Três Barras · Santa Catarina</span><span>Ponto Eletrônico</span></footer>
+<div class="toast" id="toast" hidden></div>
+
 <script>
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ico=(n)=>`<svg><use href="#i-${n}"/></svg>`;
+const nf=new Intl.NumberFormat('pt-BR');
+const num=(v)=>nf.format(Number(v)||0);
+
+// SQLite grava CURRENT_TIMESTAMP em UTC ("AAAA-MM-DD HH:MM:SS")
+function parseTs(s){
+  if(!s) return null;
+  const d=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s)?s:String(s).replace(' ','T')+'Z');
+  return isNaN(d)?null:d;
+}
+function fmtTs(s){
+  const d=parseTs(s);
+  if(!d) return '<span class="muted">Sem comunicação</span>';
+  const diff=Math.round((Date.now()-d)/60000);
+  const rel=diff<1?'agora':diff<60?`há ${diff} min`:diff<1440?`há ${Math.floor(diff/60)} h`:`há ${Math.floor(diff/1440)} d`;
+  return `${d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}<div class="t-sub">${rel}</div>`;
+}
+function fmtCpf(v){
+  const d=String(v??'').replace(/\D/g,'');
+  return d.length===11?d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'):esc(v);
+}
+const statusBadge=(s)=>{
+  const k=s==='ONLINE'?'online':s==='OFFLINE'?'offline':'unknown';
+  const t=s==='ONLINE'?'Online':s==='OFFLINE'?'Offline':'Desconhecido';
+  return `<span class="badge ${k}"><span class="dot"></span>${t}</span>`;
+};
+const roleBadge=(r)=>r==='PRIMARY'
+  ?'<span class="badge primary">Principal</span>'
+  :'<span class="badge secondary">Secundário</span>';
+const syncBadge=(s)=>{
+  const m={PENDING:['pending','Pendente'],DONE:['done','Sincronizado'],ERROR:['error','Erro'],LEASED:['leased','Em andamento']};
+  const [k,t]=m[s]||['unknown',s||'—'];
+  return `<span class="badge ${k}">${esc(t)}</span>`;
+};
+
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true},3500);
+}
+
 async function load(){
+  const btn=document.getElementById('btnRefresh');
+  btn.disabled=true;btn.classList.add('busy');
+  try{
   const [health,devices,employees]=await Promise.all([
     fetch('/health').then(r=>r.json()),
     fetch('/api/devices').then(r=>r.json()),
     fetch('/api/employees').then(r=>r.json())
   ]);
-  devicesCount.textContent=health.devices?.total??devices.length;
-  onlineCount.textContent=health.devices?.online??devices.filter(d=>d.status==='ONLINE').length;
+  const total=health.devices?.total??devices.length;
+  const online=health.devices?.online??devices.filter(d=>d.status==='ONLINE').length;
+  devicesCount.textContent=total;
+  onlineCount.textContent=online;
+  offlineCount.textContent=Math.max(total-online,0);
   employeesCount.textContent=health.employees?.total??employees.length;
-  eventsCount.textContent=health.attendance?.total??0;
+  eventsCount.textContent=num(health.attendance?.total??0);
+
+  const allBindings=employees.flatMap(e=>e.bindings||[]);
+  const pending=allBindings.filter(b=>b.sync_status==='PENDING'||b.sync_status==='LEASED').length;
+  const errors=allBindings.filter(b=>b.sync_status==='ERROR').length;
+  pendingCount.textContent=pending;
+
+  // alertas derivados dos dados já carregados
+  const offline=devices.filter(d=>d.active&&d.status==='OFFLINE');
+  const alerts=[];
+  if(offline.length) alerts.push(`<div class="alert bad">${ico('alert')}<div><strong>${offline.length===1?'1 REP offline':offline.length+' REPs offline'}:</strong> ${offline.map(d=>esc(d.name)).join(', ')}.</div></div>`);
+  if(errors) alerts.push(`<div class="alert bad">${ico('alert')}<div><strong>${errors} ${errors===1?'sincronização com erro':'sincronizações com erro'}.</strong> Verifique a tabela de servidores.</div></div>`);
+  if(pending) alerts.push(`<div class="alert warn">${ico('sync')}<div><strong>${pending} ${pending===1?'sincronização pendente':'sincronizações pendentes'}</strong> aguardando envio aos REPs.</div></div>`);
+  document.getElementById('alerts').innerHTML=alerts.join('');
+
+  document.getElementById('devicesTotal').textContent=devices.length?`${devices.length} ${devices.length===1?'equipamento':'equipamentos'}`:'';
+  document.getElementById('employeesTotal').textContent=employees.length?`${employees.length} ${employees.length===1?'servidor':'servidores'}`:'';
 
   document.getElementById('devices').innerHTML=devices.length?devices.map(d=>`
-    <tr>
-      <td><span class="tag ${d.role==='PRIMARY'?'primary':'secondary'}">${d.role==='PRIMARY'?'Principal':'Secundário'}</span></td>
-      <td>${esc(d.name)}<div class="muted">${esc(d.model||'')}</div></td>
-      <td>${esc(d.vendor)}</td>
-      <td>${esc(d.host||'—')}${d.port?':'+esc(d.port):''}</td>
-      <td><span class="tag ${d.status==='ONLINE'?'online':'offline'}">${esc(d.status)}</span></td>
-      <td>${esc(d.last_nsr??'—')}</td><td>${esc(d.attendance_count??0)}</td>
-    </tr>`).join(''):'<tr><td colspan="7" class="muted">Nenhum REP cadastrado.</td></tr>';
+    <tr class="${d.role==='PRIMARY'?'is-primary':'is-secondary'}">
+      <td data-label="Função">${roleBadge(d.role)}${d.role==='PRIMARY'?'':'<div class="t-sub">Contingência</div>'}</td>
+      <td data-label="Equipamento" class="cell-title"><div class="t-name">${esc(d.name)}</div><div class="t-sub">${esc(d.model||'Modelo não informado')}</div></td>
+      <td data-label="Fabricante">${esc(d.vendor)}</td>
+      <td data-label="Endereço IP" class="mono">${esc(d.host||'—')}${d.port?':'+esc(d.port):''}</td>
+      <td data-label="Status">${statusBadge(d.status)}</td>
+      <td data-label="Último NSR" class="num mono">${esc(d.last_nsr??'—')}</td>
+      <td data-label="Batidas" class="num">${num(d.attendance_count)}</td>
+      <td data-label="Última comunicação">${fmtTs(d.last_seen_at)}</td>
+    </tr>`).join(''):'<tr><td colspan="8" class="empty">Nenhum REP cadastrado.</td></tr>';
 
   document.getElementById('deviceChecks').innerHTML=devices.filter(d=>d.active).map(d=>`
     <label class="check"><input type="checkbox" name="deviceId" value="${esc(d.id)}">
@@ -99,11 +428,29 @@ async function load(){
 
   document.getElementById('employees').innerHTML=employees.length?employees.map(e=>{
     const bs=e.bindings||[];
-    return `<tr><td>${esc(e.name)}</td><td>${esc(e.registration||'—')}</td><td>${esc(e.cpf||'—')}</td>
-      <td>${bs.map(b=>'<span class="tag">'+esc(b.device_name)+'</span>').join(' ')||'—'}</td>
-      <td>${bs.map(b=>esc(b.sync_status)).join(', ')||'—'}</td></tr>`;
-  }).join(''):'<tr><td colspan="5" class="muted">Nenhum servidor cadastrado.</td></tr>';
+    return `<tr>
+      <td data-label="Matrícula" class="mono">${esc(e.registration||'—')}</td>
+      <td data-label="Nome" class="cell-title"><div class="t-name">${esc(e.name)}</div></td>
+      <td data-label="CPF" class="mono">${e.cpf?fmtCpf(e.cpf):'—'}</td>
+      <td data-label="REPs vinculados">${bs.length?'<div class="chips">'+bs.map(b=>'<span class="chip">'+esc(b.device_name)+'</span>').join('')+'</div>':'<span class="muted">Nenhum</span>'}</td>
+      <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
+      <td data-label="Ações"><div class="actions">${bs.length?`<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`:''}</div></td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="6" class="empty">Nenhum servidor cadastrado.</td></tr>';
+  } finally { btn.disabled=false;btn.classList.remove('busy'); }
 }
+
+// Reaproveita o endpoint existente POST /api/employees/:id/sync
+async function syncEmployee(id,btn){
+  btn.disabled=true;
+  try{
+    const r=await fetch(`/api/employees/${id}/sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const b=await r.json().catch(()=>({}));
+    toast(r.ok?'Sincronização enfileirada.':(b.error||'Falha ao enfileirar sincronização.'));
+    await load();
+  }catch(err){ toast('Falha ao enfileirar sincronização.'); btn.disabled=false; }
+}
+
 document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
   const status=document.getElementById('formStatus');
@@ -130,6 +477,12 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   await load();
 });
 
+// destaca a seção ativa na navegação
+document.querySelectorAll('nav.sub a').forEach(a=>a.addEventListener('click',()=>{
+  document.querySelectorAll('nav.sub a').forEach(x=>x.classList.toggle('on',x===a));
+}));
+
 load().catch(err=>console.error(err));
 </script>
-</body></html>
+</body>
+</html>
