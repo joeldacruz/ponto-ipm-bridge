@@ -423,6 +423,7 @@ async function load(){
   employeesCount.textContent=health.employees?.total??employees.length;
   eventsCount.textContent=num(health.attendance?.total??0);
 
+  window._employees=employees;
   const allBindings=employees.flatMap(e=>e.bindings||[]);
   const pending=allBindings.filter(b=>b.sync_status==='PENDING'||b.sync_status==='LEASED').length;
   const errors=allBindings.filter(b=>b.sync_status==='ERROR').length;
@@ -465,7 +466,7 @@ async function load(){
       <td data-label="REPs vinculados">${bs.length?'<div class="chips">'+bs.map(b=>'<span class="chip">'+esc(b.device_name)+'</span>').join('')+'</div>':'<span class="muted">Nenhum</span>'}</td>
       <td data-label="PIN"><span class="pin-state">${e.pinConfigured?'<span class="badge done">Configurado</span>':'<span class="badge pending">Não definido</span>'}</span></td>
       <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
-      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)},'${esc(String(e.name)).replace(/'/g,'&#39;')}',${e.pinConfigured?'true':'false'})">PIN</button>${bs.length?(bs.every(b=>b.sync_status==='IMPORTED')
+      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button>${bs.length?(bs.every(b=>b.sync_status==='IMPORTED')
         ?`<button type="button" class="btn ghost sm" disabled title="Cadastro importado: sem escrita no REP">${ico('sync')}Sincronizar</button>`
         :`<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`):''}</div></td>
     </tr>`;
@@ -550,10 +551,12 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
 });
 
 let pinEmployeeId=null;
-function openPinDialog(id,name,configured){
+function openPinDialog(id){
+  const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
+  if(!employee) return;
   pinEmployeeId=id;
-  document.getElementById('pinTitle').textContent=configured?'Alterar PIN do ponto':'Definir PIN do ponto';
-  document.getElementById('pinEmployee').textContent=name;
+  document.getElementById('pinTitle').textContent=employee.pinConfigured?'Alterar PIN do ponto':'Definir PIN do ponto';
+  document.getElementById('pinEmployee').textContent=employee.name;
   const input=document.getElementById('pinValue');
   input.value='';
   input.classList.remove('invalid');
