@@ -31,6 +31,31 @@ namespace PontoCamara.TopdataAgent
         public string device_id;
         public string operation;
         public string payload_json;
+        public SyncPayload payload;
+    }
+
+    public sealed class SyncPayload
+    {
+        public SyncEmployee employee;
+        public SyncBinding binding;
+    }
+
+    public sealed class SyncEmployee
+    {
+        public int id;
+        public string name;
+        public string cpf;
+        public string registration;
+        public bool active;
+        public string pin;
+    }
+
+    public sealed class SyncBinding
+    {
+        public string deviceId;
+        public string deviceEmployeeNo;
+        public string cardNo;
+        public bool enabled;
     }
 
     public sealed class JobResult
