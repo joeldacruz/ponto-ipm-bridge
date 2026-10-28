@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS employees (
   cpf TEXT,
   registration TEXT,
   device_employee_no TEXT NOT NULL UNIQUE,
+  pin_ciphertext TEXT,
+  pin_iv TEXT,
+  pin_tag TEXT,
+  pin_updated_at TEXT,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -125,6 +129,10 @@ function ensureColumn(table: string, column: string, definition: string) {
 
 // Migra bases criadas pelas primeiras versões do MVP.
 ensureColumn('device_events', 'nsr', 'INTEGER');
+ensureColumn('employees', 'pin_ciphertext', 'TEXT');
+ensureColumn('employees', 'pin_iv', 'TEXT');
+ensureColumn('employees', 'pin_tag', 'TEXT');
+ensureColumn('employees', 'pin_updated_at', 'TEXT');
 
 const topdataHost = process.env.TOPDATA_HOST;
 if (topdataHost) {
