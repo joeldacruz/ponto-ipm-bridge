@@ -15,3 +15,6 @@ agent-topdata/sdk/*.rar
 agent-topdata/sdk/*.msi
 agent-topdata/sdk/**/*.dll
 agent-topdata/sdk/**/*.exe
+
+# Listas de importação (dados pessoais de servidores) — nunca versionar
+data/import/

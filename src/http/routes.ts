@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { db } from '../storage/db.js';
 import { listAttendance, saveEvents } from '../services/events.js';
 import { exportGenericCsv } from '../services/exporter.js';
-import { completeJob, leaseJobs, queueEmployeeSync } from '../services/sync.js';
+import { completeJob, countSyncTargets, leaseJobs, queueEmployeeSync } from '../services/sync.js';
 import type { DeviceEvent } from '../core/types.js';
 
 export const router = Router();
@@ -120,7 +120,7 @@ router.post('/api/employees/:id/bindings', (req, res) => {
       device_employee_no=excluded.device_employee_no,
       card_no=excluded.card_no,
       enabled=excluded.enabled,
-      sync_status='PENDING',
+      sync_status=CASE WHEN sync_status='IMPORTED' THEN 'IMPORTED' ELSE 'PENDING' END,
       sync_error=NULL,
       updated_at=CURRENT_TIMESTAMP
   `).run(employeeId, deviceId, String(deviceEmployeeNo), cardNo ?? null, enabled ? 1 : 0);
@@ -132,6 +132,13 @@ router.post('/api/employees/:id/bindings', (req, res) => {
 
 router.post('/api/employees/:id/sync', (req, res) => {
   try {
+    const targets = countSyncTargets(Number(req.params.id), req.body?.deviceId);
+    if (targets.eligible === 0 && targets.blocked > 0) {
+      return res.status(409).json({
+        error: 'sync_blocked_imported',
+        message: 'Cadastro importado: a sincronização com o REP está bloqueada para este vínculo.'
+      });
+    }
     const jobs = queueEmployeeSync(Number(req.params.id), req.body?.deviceId);
     res.json({ ok: true, jobs });
   } catch (error) {

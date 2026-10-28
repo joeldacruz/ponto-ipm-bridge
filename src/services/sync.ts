@@ -1,5 +1,21 @@
 import { db } from '../storage/db.js';
 
+// Vínculos criados pelo importador (scripts/import-employees.ts) ficam com sync_status='IMPORTED':
+// o cadastro já existe no REP e a importação é só no banco central. Nunca geram sync_jobs.
+export const IMPORTED_STATUS = 'IMPORTED';
+
+// Quantos vínculos ativos do servidor poderiam ser enviados ao REP e quantos estão bloqueados por IMPORTED.
+export function countSyncTargets(employeeId: number, deviceId?: string) {
+  const rows = db.prepare(`
+    SELECT b.sync_status
+    FROM employee_device_bindings b
+    JOIN devices d ON d.id=b.device_id
+    WHERE b.employee_id=? AND (? IS NULL OR b.device_id=?) AND b.enabled=1 AND d.active=1
+  `).all(employeeId, deviceId ?? null, deviceId ?? null) as Array<{ sync_status: string }>;
+  const blocked = rows.filter((r) => r.sync_status === IMPORTED_STATUS).length;
+  return { eligible: rows.length - blocked, blocked };
+}
+
 export function queueEmployeeSync(employeeId: number, deviceId?: string) {
   const employee = db.prepare('SELECT * FROM employees WHERE id=?').get(employeeId) as any;
   if (!employee) throw new Error('employee_not_found');
@@ -10,12 +26,14 @@ export function queueEmployeeSync(employeeId: number, deviceId?: string) {
         FROM employee_device_bindings b
         JOIN devices d ON d.id=b.device_id
         WHERE b.employee_id=? AND b.device_id=? AND b.enabled=1 AND d.active=1
+          AND b.sync_status <> 'IMPORTED'
       `).all(employeeId, deviceId) as any[]
     : db.prepare(`
         SELECT b.*, d.vendor, d.model, d.agent_id
         FROM employee_device_bindings b
         JOIN devices d ON d.id=b.device_id
         WHERE b.employee_id=? AND b.enabled=1 AND d.active=1
+          AND b.sync_status <> 'IMPORTED'
       `).all(employeeId) as any[];
 
   const insert = db.prepare(`
