@@ -133,7 +133,7 @@
     .actions{display:flex;gap:6px;justify-content:flex-end}
 
     /* Formulário */
-    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:16px}
+    .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr .8fr;gap:16px}
     .field label,.field .lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2)}
     input[type=text],input:not([type]),input[inputmode]{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
     input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
@@ -157,6 +157,13 @@
 
     .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:50;max-width:calc(100% - 32px)}
     .toast[hidden]{display:none}
+    .pin-dialog{border:0;border-radius:14px;padding:0;max-width:420px;width:calc(100% - 32px);box-shadow:0 18px 60px rgba(0,0,0,.28)}
+    .pin-dialog::backdrop{background:rgba(20,33,43,.48)}
+    .pin-dialog .box{padding:20px}
+    .pin-dialog h3{margin:0 0 6px;font-size:18px}
+    .pin-dialog p{margin:0 0 16px;font-size:13.5px;color:var(--muted)}
+    .pin-dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+    .pin-state{white-space:nowrap}
 
     /* Responsivo */
     @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:repeat(3,1fr)}.formgrid .field:first-child{grid-column:1/-1}}
@@ -302,6 +309,7 @@
           <div class="field"><label>Matrícula<input id="empRegistration" placeholder="Ex.: 3026" autocomplete="off"></label></div>
           <div class="field"><label>CPF<input id="empCpf" inputmode="numeric" placeholder="Somente números" autocomplete="off" aria-describedby="empCpfHint"></label><span class="hint" id="empCpfHint"></span></div>
           <div class="field"><label>PIS/PASEP<input id="empPis" inputmode="numeric" placeholder="Somente números" autocomplete="off" aria-describedby="empPisHint"></label><span class="hint" id="empPisHint"></span></div>
+          <div class="field"><label>PIN do ponto<input id="empPin" type="password" inputmode="numeric" maxlength="4" placeholder="4 dígitos" autocomplete="new-password" aria-describedby="empPinHint"></label><span class="hint" id="empPinHint"></span></div>
         </div>
         <div class="devpick">
           <div class="lbl">Enviar cadastro para</div>
@@ -322,8 +330,8 @@
     </div>
     <div class="tw">
       <table class="cards">
-        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>REPs vinculados</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
-        <tbody id="employees"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>REPs vinculados</th><th>PIN</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
+        <tbody id="employees"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -333,6 +341,23 @@
     <div><strong>Regra do projeto.</strong> O REP é a fonte da marcação original. O Ponto Eletrônico coleta e administra; o IPM continua responsável por jornada, banco de horas, justificativas e fechamento.</div>
   </div>
 </main>
+
+<dialog id="pinDialog" class="pin-dialog">
+  <form method="dialog" class="box" id="pinForm">
+    <h3 id="pinTitle">Definir PIN do ponto</h3>
+    <p id="pinEmployee"></p>
+    <div class="field">
+      <label>Novo PIN
+        <input id="pinValue" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="4 dígitos">
+      </label>
+      <span class="hint" id="pinHint">O PIN atual nunca é exibido.</span>
+    </div>
+    <div class="row">
+      <button class="btn ghost" value="cancel" type="button" onclick="closePinDialog()">Cancelar</button>
+      <button class="btn" value="default" type="submit">Salvar PIN</button>
+    </div>
+  </form>
+</dialog>
 
 <footer class="site"><span>Câmara Municipal de Três Barras · Santa Catarina</span><span>Ponto Eletrônico</span></footer>
 <div class="toast" id="toast" hidden></div>
@@ -438,12 +463,13 @@ async function load(){
       <td data-label="Nome" class="cell-title"><div class="t-name">${esc(e.name)}</div></td>
       <td data-label="CPF" class="mono">${e.cpf?fmtCpf(e.cpf):'—'}</td>
       <td data-label="REPs vinculados">${bs.length?'<div class="chips">'+bs.map(b=>'<span class="chip">'+esc(b.device_name)+'</span>').join('')+'</div>':'<span class="muted">Nenhum</span>'}</td>
+      <td data-label="PIN"><span class="pin-state">${e.pinConfigured?'<span class="badge done">Configurado</span>':'<span class="badge pending">Não definido</span>'}</span></td>
       <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
-      <td data-label="Ações"><div class="actions">${bs.length?(bs.every(b=>b.sync_status==='IMPORTED')
+      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)},'${esc(String(e.name)).replace(/'/g,'&#39;')}',${e.pinConfigured?'true':'false'})">PIN</button>${bs.length?(bs.every(b=>b.sync_status==='IMPORTED')
         ?`<button type="button" class="btn ghost sm" disabled title="Cadastro importado: sem escrita no REP">${ico('sync')}Sincronizar</button>`
         :`<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`):''}</div></td>
     </tr>`;
-  }).join(''):'<tr><td colspan="6" class="empty">Nenhum servidor cadastrado.</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="empty">Nenhum servidor cadastrado.</td></tr>';
   } finally { btn.disabled=false;btn.classList.remove('busy'); }
 }
 
@@ -468,23 +494,30 @@ function setHint(inputId,hintId,msg){
 function validateEmployeeForm(p){
   const cpfErr=p.cpf&&p.cpf.length!==11?'O CPF deve ter 11 dígitos.':'';
   const pisErr=p.deviceEmployeeNo&&p.deviceEmployeeNo.length!==11?'O PIS/PASEP deve ter 11 dígitos.':'';
+  const pinErr=p.pin&&p.pin.length!==4?'O PIN deve ter exatamente 4 dígitos.':'';
   const topErr=!p.deviceEmployeeNo&&topdataSelected()?'Informe o PIS/PASEP para cadastrar este servidor no REP Topdata.':'';
+  const topPinErr=!p.pin&&topdataSelected()?'Informe o PIN de 4 dígitos para o REP Topdata.':'';
   setHint('empCpf','empCpfHint',cpfErr);
   setHint('empPis','empPisHint',pisErr||topErr);
-  if(cpfErr||pisErr||topErr) return cpfErr||pisErr||topErr;
+  setHint('empPin','empPinHint',pinErr||topPinErr);
+  if(cpfErr||pisErr||pinErr||topErr||topPinErr) return cpfErr||pisErr||pinErr||topErr||topPinErr;
   if(!p.registration&&!p.cpf&&!p.deviceEmployeeNo) return 'Informe matrícula, CPF ou PIS/PASEP.';
   return '';
 }
-// campos numéricos: só dígitos, até 11 (aceita colar "123.456.789-01")
-['empCpf','empPis'].forEach(id=>document.getElementById(id).addEventListener('input',e=>{
-  e.target.value=onlyDigits(e.target.value).slice(0,11);
+// campos numéricos: CPF/PIS até 11; PIN até 4 dígitos
+['empCpf','empPis','empPin'].forEach(id=>document.getElementById(id).addEventListener('input',e=>{
+  const max=id==='empPin'?4:11;
+  e.target.value=onlyDigits(e.target.value).slice(0,max);
   e.target.classList.remove('invalid');
   document.getElementById(id+'Hint').textContent='';
 }));
 // ao marcar/desmarcar o REP Topdata, avisa que o PIS/PASEP passa a ser obrigatório
 document.getElementById('deviceChecks').addEventListener('change',()=>{
-  const hint=document.getElementById('empPisHint');
-  if(!hint.classList.contains('err')) hint.textContent=topdataSelected()?'Obrigatório para o REP Topdata.':'';
+  const selected=topdataSelected();
+  const pisHint=document.getElementById('empPisHint');
+  const pinHint=document.getElementById('empPinHint');
+  if(!pisHint.classList.contains('err')) pisHint.textContent=selected?'Obrigatório para o REP Topdata.':'';
+  if(!pinHint.classList.contains('err')) pinHint.textContent=selected?'Obrigatório para o REP Topdata.':'';
 });
 document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
@@ -495,6 +528,7 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
     registration:document.getElementById('empRegistration').value.trim()||null,
     cpf:onlyDigits(document.getElementById('empCpf').value)||null,       // texto: preserva zeros à esquerda
     deviceEmployeeNo:onlyDigits(document.getElementById('empPis').value)||null, // PIS/PASEP, identificador do REP
+    pin:onlyDigits(document.getElementById('empPin').value)||null,
     deviceIds
   };
   const problem=validateEmployeeForm(payload);
@@ -511,7 +545,51 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   }
   status.textContent='Servidor cadastrado. '+(body.syncJobs?.length?body.syncJobs.length+' sincronização(ões) enfileirada(s).':'Sem REP selecionado.');
   ev.target.reset();
-  setHint('empCpf','empCpfHint','');setHint('empPis','empPisHint','');
+  setHint('empCpf','empCpfHint','');setHint('empPis','empPisHint','');setHint('empPin','empPinHint','');
+  await load();
+});
+
+let pinEmployeeId=null;
+function openPinDialog(id,name,configured){
+  pinEmployeeId=id;
+  document.getElementById('pinTitle').textContent=configured?'Alterar PIN do ponto':'Definir PIN do ponto';
+  document.getElementById('pinEmployee').textContent=name;
+  const input=document.getElementById('pinValue');
+  input.value='';
+  input.classList.remove('invalid');
+  document.getElementById('pinHint').textContent='O PIN atual nunca é exibido.';
+  document.getElementById('pinDialog').showModal();
+  setTimeout(()=>input.focus(),0);
+}
+function closePinDialog(){
+  document.getElementById('pinDialog').close();
+  pinEmployeeId=null;
+}
+document.getElementById('pinValue').addEventListener('input',e=>{
+  e.target.value=onlyDigits(e.target.value).slice(0,4);
+  e.target.classList.remove('invalid');
+  document.getElementById('pinHint').textContent='O PIN atual nunca é exibido.';
+});
+document.getElementById('pinForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const pin=onlyDigits(document.getElementById('pinValue').value);
+  if(pin.length!==4){
+    document.getElementById('pinValue').classList.add('invalid');
+    document.getElementById('pinHint').textContent='Informe exatamente 4 dígitos.';
+    return;
+  }
+  const response=await fetch(`/api/employees/${pinEmployeeId}/pin`,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pin})
+  });
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok){
+    document.getElementById('pinHint').textContent=body.error||'Falha ao salvar PIN.';
+    return;
+  }
+  closePinDialog();
+  toast('PIN salvo no sistema. O valor não será exibido.');
   await load();
 });
 
