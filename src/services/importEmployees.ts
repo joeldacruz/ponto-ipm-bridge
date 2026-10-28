@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
+import { employeeNoMatchSql } from '../core/employeeMatch.js';
 
 // Importação em lote de servidores direto no banco central.
 // NÃO cria sync_jobs, NÃO fala com REP e NÃO toca em device_events.
@@ -114,7 +115,7 @@ function identifiedAttendance(db: Database, deviceId: string): { identified: num
   const row = db.prepare(`
     SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN emp.id IS NOT NULL THEN 1 ELSE 0 END),0) AS identified
     FROM device_events e
-    LEFT JOIN employee_device_bindings b ON b.device_id=e.device_id AND b.device_employee_no=e.employee_no
+    LEFT JOIN employee_device_bindings b ON b.device_id=e.device_id AND ${employeeNoMatchSql('b', 'e')}
     LEFT JOIN employees emp ON emp.id=b.employee_id
     WHERE e.kind='ATTENDANCE' AND e.device_id=?
   `).get(deviceId) as { total: number; identified: number };

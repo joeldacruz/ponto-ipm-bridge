@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   eventsFingerprint, maskId, parseRecords, runImport, validateSchema
 } from '../src/services/importEmployees.js';
+import { employeeNoMatchSql } from '../src/core/employeeMatch.js';
 
 // Uso:
 //   tsx scripts/import-employees.ts --file data/import/servidores_ponto.json            (simulação, não grava)
@@ -74,7 +75,7 @@ async function main() {
       SELECT emp.name, COUNT(e.id) AS batidas
       FROM employee_device_bindings b
       JOIN employees emp ON emp.id=b.employee_id
-      LEFT JOIN device_events e ON e.device_id=b.device_id AND e.employee_no=b.device_employee_no AND e.kind='ATTENDANCE'
+      LEFT JOIN device_events e ON e.device_id=b.device_id AND ${employeeNoMatchSql('b', 'e')} AND e.kind='ATTENDANCE'
       WHERE b.device_id=? AND b.device_employee_no=? GROUP BY b.id
     `);
     console.log('\nBatidas históricas por servidor do arquivo:');

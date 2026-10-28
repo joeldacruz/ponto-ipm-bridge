@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../storage/db.js';
+import { employeeNoMatchSql } from '../core/employeeMatch.js';
 
 /**
  * Exportador provisório para homologação.
@@ -12,7 +13,7 @@ export function exportGenericCsv(period: string): { filePath: string; count: num
     SELECT e.id, e.occurred_at, e.employee_no, e.attendance_status,
            emp.name, emp.cpf, emp.registration
     FROM device_events e
-    LEFT JOIN employees emp ON emp.device_employee_no=e.employee_no
+    LEFT JOIN employees emp ON ${employeeNoMatchSql('emp', 'e')}
     WHERE e.kind='ATTENDANCE' AND substr(e.occurred_at,1,7)=?
     ORDER BY e.occurred_at ASC
   `).all(period) as any[];

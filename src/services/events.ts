@@ -1,5 +1,6 @@
 import { db } from '../storage/db.js';
 import type { DeviceEvent } from '../core/types.js';
+import { employeeNoMatchSql } from '../core/employeeMatch.js';
 
 const insertEvent = db.prepare(`
 INSERT OR IGNORE INTO device_events
@@ -30,7 +31,7 @@ export function listAttendance(period?: string) {
     SELECT e.*, emp.name, emp.cpf, emp.registration, d.name AS device_name, d.role AS device_role
     FROM device_events e
     LEFT JOIN employee_device_bindings b
-      ON b.device_id = e.device_id AND b.device_employee_no = e.employee_no
+      ON b.device_id = e.device_id AND ${employeeNoMatchSql('b', 'e')}
     LEFT JOIN employees emp ON emp.id = b.employee_id
     LEFT JOIN devices d ON d.id = e.device_id
     WHERE e.kind='ATTENDANCE'

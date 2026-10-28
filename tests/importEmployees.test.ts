@@ -205,6 +205,103 @@ test('regressão: vínculo normal continua sincronizando e servidor inexistente 
   });
 });
 
+// ---- Associação de PIS de 11 dígitos com o identificador de 12 posições do Topdata ('0' + PIS) ----
+function addRawEvent(no: string, nsr: number, raw = `raw-${nsr}`) {
+  db.prepare(`INSERT INTO device_events(source_id,device_id,employee_no,occurred_at,kind,nsr,raw_payload) VALUES(?,?,?,?,?,?,?)`)
+    .run(`${DEV}:${nsr}`, DEV, no, '2026-10-28T07:01:00', 'ATTENDANCE', nsr, raw);
+}
+const snapshot = () => db.prepare('SELECT id,source_id,device_id,employee_no,nsr,raw_payload FROM device_events ORDER BY id').all();
+
+test('PIS de 12 posições (0 + PIS de 11) encontra o vínculo; 11 dígitos continua funcionando; outros não associam', async () => {
+  wipe();
+  const pis = '12864722692';
+  addRawEvent('0' + pis, 10);        // Topdata: 12 posições
+  addRawEvent(pis, 11);              // já com 11 dígitos
+  addRawEvent('0' + '99999999999', 12); // 12 posições, outro PIS
+  addRawEvent('1' + pis, 13);        // 12 dígitos mas não começa com 0
+  addRawEvent('00' + pis.slice(0, 10), 14); // 12 dígitos começando com 0, últimos 11 diferentes
+  addRawEvent('0' + pis.slice(0, 10) + 'X', 15); // 12 posições com letra
+  addRawEvent('0' + pis + '0', 16);  // 13 posições
+  const antes = snapshot(); const fp = eventsFingerprint(db);
+
+  const r = runImport(db, [rec('SERVIDOR PIS', '2001-00', pis)], { apply: true });
+  assert.deepEqual([r.attendance.before, r.attendance.after, r.attendance.total], [0, 2, 7]);
+
+  const app = express(); app.use(express.json()); app.use(router);
+  const server = app.listen(0);
+  try {
+    const rows = await (await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/events/attendance`)).json() as any[];
+    const nomes = new Map(rows.map((e) => [e.nsr, e.name]));
+    assert.equal(nomes.get(10), 'SERVIDOR PIS');
+    assert.equal(nomes.get(11), 'SERVIDOR PIS');
+    for (const nsr of [12, 13, 14, 15, 16]) assert.equal(nomes.get(nsr), null, `NSR ${nsr} não pode associar`);
+    assert.equal(rows.length, 7); // nenhuma duplicação de linhas pelo JOIN
+    assert.equal(rows.find((e) => e.nsr === 10).employee_no, '0' + pis); // valor original preservado na resposta
+  } finally { server.close(); }
+
+  // device_events intacto: nem employee_no, nem NSR, nem raw_payload, nem source_id.
+  assert.deepEqual(snapshot(), antes);
+  assert.equal(eventsFingerprint(db), fp);
+  assert.equal(r.eventsUntouched, true);
+  assert.equal((db.prepare('SELECT employee_no FROM device_events WHERE nsr=10').get() as any).employee_no, '0' + pis);
+  // formato do vínculo: continua o PIS de 11 dígitos do arquivo
+  assert.equal((db.prepare('SELECT device_employee_no AS n FROM employee_device_bindings').get() as any).n, pis);
+  assert.equal(count('sync_jobs'), 0);
+});
+
+test('exportação (CSV): evento 0+PIS identifica o servidor; 11 dígitos continua; inválido não associa; evento intacto', async () => {
+  wipe();
+  const { exportGenericCsv } = await import('../src/services/exporter.js');
+  const pis = '12864722692';
+  addRawEvent('0' + pis, 20);            // Topdata: 12 posições
+  addRawEvent(pis, 21);                  // 11 dígitos exatos
+  addRawEvent('0' + '99999999999', 22);  // outro PIS
+  addRawEvent('1' + pis, 23);            // 12 dígitos sem 0 inicial
+  addRawEvent('0' + pis.slice(0, 10) + 'X', 24); // 12 posições com letra
+  runImport(db, [rec('SERVIDOR EXPORTA', '4001-00', pis)], { apply: true });
+  const antes = snapshot(); const fp = eventsFingerprint(db);
+
+  const cwd = process.cwd(); process.chdir(tmp);
+  let out: { filePath: string; count: number };
+  try { out = exportGenericCsv('2026-10'); } finally { process.chdir(cwd); }
+
+  assert.equal(out.count, 5); // nenhuma linha duplicada pelo JOIN
+  const linhas = fs.readFileSync(out.filePath, 'utf8').split('\n').slice(1).map((l) => l.split(';').map((c) => c.replace(/^"|"$/g, '')));
+  const porNo = new Map(linhas.map((c) => [c[4], c])); // coluna 4 = device_employee_no do evento
+  assert.equal(porNo.get('0' + pis)![3], 'SERVIDOR EXPORTA');   // 0 + PIS associado
+  assert.equal(porNo.get('0' + pis)![2], '4001-00');            // matrícula do servidor
+  assert.equal(porNo.get(pis)![3], 'SERVIDOR EXPORTA');         // 11 dígitos exatos continua
+  for (const no of ['0' + '99999999999', '1' + pis, '0' + pis.slice(0, 10) + 'X']) assert.equal(porNo.get(no)![3], '', `${no} não pode associar`);
+  assert.equal(porNo.get('0' + pis)![4], '0' + pis); // o identificador original sai como foi coletado
+
+  assert.deepEqual(snapshot(), antes); assert.equal(eventsFingerprint(db), fp); // device_events intacto
+  assert.equal(count('sync_jobs'), 0);
+});
+
+test('caso real simulado: 24 servidores + 2 batidas Topdata de 12 posições → dry-run prevê 2 identificadas; IMPORTED segue protegido', async () => {
+  wipe();
+  const lista = Array.from({ length: 24 }, (_, i) => rec(`SERVIDOR ${i + 1}`, `${3000 + i}-00`, String(10000000000 + i * 7919)));
+  addRawEvent('0' + lista[0].deviceEmployeeNo, 100);
+  addRawEvent('0' + lista[5].deviceEmployeeNo, 101);
+  const fp = eventsFingerprint(db);
+
+  const dry = runImport(db, lista, { apply: false });
+  assert.equal(dry.applied, false); assert.equal(dry.created, 24); assert.equal(dry.errors.length, 0);
+  assert.deepEqual([dry.attendance.before, dry.attendance.after, dry.attendance.total], [0, 2, 2]);
+  assert.equal(count('employees'), 0); assert.equal(count('sync_jobs'), 0);
+
+  const real = runImport(db, lista, { apply: true });
+  assert.deepEqual([real.attendance.before, real.attendance.after], [0, 2]);
+  assert.equal(count('employees'), 24); assert.equal(count('sync_jobs'), 0);
+  assert.equal(eventsFingerprint(db), fp);
+
+  await withApi(async (post) => {
+    const emps = db.prepare('SELECT id FROM employees').all() as any[];
+    for (const e of emps) assert.equal((await post(`/api/employees/${e.id}/sync`)).status, 409);
+  });
+  assert.equal(count('sync_jobs'), 0);
+});
+
 test('CLI: simulação não grava; --apply faz backup com SHA-256 e não cria sync_jobs', () => {
   wipe(); addEvent(A.deviceEmployeeNo, 1);
   db.pragma('wal_checkpoint(TRUNCATE)');
