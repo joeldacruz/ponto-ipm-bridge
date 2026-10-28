@@ -63,7 +63,7 @@
     .btn.ghost{background:var(--surface);color:var(--brand);border-color:#cfd9d4}
     .btn.ghost:hover{background:var(--brand-soft)}
     .btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
-    .btn[disabled]{opacity:.6;cursor:wait}
+    .btn[disabled]{opacity:.6;cursor:wait}.btn.ghost[disabled]{cursor:not-allowed}
     .btn.busy svg{animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
     @media (prefers-reduced-motion:reduce){.btn.busy svg{animation:none}}
@@ -112,6 +112,7 @@
     .badge.pending{background:var(--warn-soft);color:var(--warn);border-color:#f1deb0}
     .badge.done{background:var(--ok-soft);color:var(--ok);border-color:#cde8d8}
     .badge.error{background:var(--bad-soft);color:var(--bad);border-color:#f0cfcc}
+    .badge.imported{background:var(--info-soft);color:var(--info);border-color:#cbdcf0}
     .badge.leased{background:var(--info-soft);color:var(--info);border-color:#cbdcf0}
     .chip{display:inline-block;padding:2px 9px;border-radius:7px;background:var(--line-2);font-size:12.5px;color:var(--ink-2);border:1px solid var(--line)}
     .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -364,7 +365,7 @@ const roleBadge=(r)=>r==='PRIMARY'
   ?'<span class="badge primary">Principal</span>'
   :'<span class="badge secondary">Secundário</span>';
 const syncBadge=(s)=>{
-  const m={PENDING:['pending','Pendente'],DONE:['done','Sincronizado'],ERROR:['error','Erro'],LEASED:['leased','Em andamento']};
+  const m={PENDING:['pending','Pendente'],DONE:['done','Sincronizado'],ERROR:['error','Erro'],LEASED:['leased','Em andamento'],IMPORTED:['imported','Importado']};
   const [k,t]=m[s]||['unknown',s||'—'];
   return `<span class="badge ${k}">${esc(t)}</span>`;
 };
@@ -434,7 +435,9 @@ async function load(){
       <td data-label="CPF" class="mono">${e.cpf?fmtCpf(e.cpf):'—'}</td>
       <td data-label="REPs vinculados">${bs.length?'<div class="chips">'+bs.map(b=>'<span class="chip">'+esc(b.device_name)+'</span>').join('')+'</div>':'<span class="muted">Nenhum</span>'}</td>
       <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
-      <td data-label="Ações"><div class="actions">${bs.length?`<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`:''}</div></td>
+      <td data-label="Ações"><div class="actions">${bs.length?(bs.every(b=>b.sync_status==='IMPORTED')
+        ?`<button type="button" class="btn ghost sm" disabled title="Cadastro importado: sem escrita no REP">${ico('sync')}Sincronizar</button>`
+        :`<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`):''}</div></td>
     </tr>`;
   }).join(''):'<tr><td colspan="6" class="empty">Nenhum servidor cadastrado.</td></tr>';
   } finally { btn.disabled=false;btn.classList.remove('busy'); }
@@ -446,7 +449,7 @@ async function syncEmployee(id,btn){
   try{
     const r=await fetch(`/api/employees/${id}/sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const b=await r.json().catch(()=>({}));
-    toast(r.ok?'Sincronização enfileirada.':(b.error||'Falha ao enfileirar sincronização.'));
+    toast(r.ok?'Sincronização enfileirada.':(b.message||b.error||'Falha ao enfileirar sincronização.'));
     await load();
   }catch(err){ toast('Falha ao enfileirar sincronização.'); btn.disabled=false; }
 }
