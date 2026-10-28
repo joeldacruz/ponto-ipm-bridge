@@ -1,4 +1,5 @@
 import { db } from '../storage/db.js';
+import { decryptPin } from '../security/pin.js';
 
 // Vínculos criados pelo importador (scripts/import-employees.ts) ficam com sync_status='IMPORTED':
 // o cadastro já existe no REP e a importação é só no banco central. Nunca geram sync_jobs.
@@ -94,7 +95,26 @@ export function leaseJobs(agentId: string, limit = 20) {
     const leased: any[] = [];
     for (const job of jobs) {
       if (lease.run(agentId, job.id).changes === 1) {
-        leased.push({ ...job, status: 'LEASED', payload: JSON.parse(job.payload_json) });
+        const payload = JSON.parse(job.payload_json);
+
+        if (job.operation === 'UPSERT_EMPLOYEE' && job.employee_id) {
+          const pin = db.prepare(`
+            SELECT pin_ciphertext, pin_iv, pin_tag
+            FROM employees
+            WHERE id=?
+          `).get(job.employee_id) as {
+            pin_ciphertext: string | null;
+            pin_iv: string | null;
+            pin_tag: string | null;
+          } | undefined;
+
+          if (pin?.pin_ciphertext && pin.pin_iv && pin.pin_tag) {
+            payload.employee = payload.employee ?? {};
+            payload.employee.pin = decryptPin(pin.pin_ciphertext, pin.pin_iv, pin.pin_tag);
+          }
+        }
+
+        leased.push({ ...job, status: 'LEASED', payload });
       }
     }
     return leased;
