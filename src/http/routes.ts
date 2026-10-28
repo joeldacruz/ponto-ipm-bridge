@@ -4,6 +4,7 @@ import { listAttendance, saveEvents } from '../services/events.js';
 import { exportGenericCsv } from '../services/exporter.js';
 import { completeJob, countSyncTargets, leaseJobs, queueEmployeeSync } from '../services/sync.js';
 import type { DeviceEvent } from '../core/types.js';
+import { encryptPin, isValidPin } from '../security/pin.js';
 
 export const router = Router();
 
@@ -63,7 +64,17 @@ router.get('/api/events/attendance', (req, res) => {
 });
 
 router.get('/api/employees', (_req, res) => {
-  const employees = db.prepare('SELECT * FROM employees ORDER BY name').all() as any[];
+  const employees = db.prepare(`
+    SELECT
+      id, name, cpf, registration, device_employee_no, active, created_at,
+      CASE
+        WHEN pin_ciphertext IS NOT NULL AND pin_iv IS NOT NULL AND pin_tag IS NOT NULL THEN 1
+        ELSE 0
+      END AS pin_configured,
+      pin_updated_at
+    FROM employees
+    ORDER BY name
+  `).all() as any[];
   const bindings = db.prepare(`
     SELECT b.*, d.name AS device_name, d.role AS device_role, d.vendor
     FROM employee_device_bindings b
@@ -73,12 +84,14 @@ router.get('/api/employees', (_req, res) => {
 
   res.json(employees.map((employee) => ({
     ...employee,
+    pinConfigured: !!employee.pin_configured,
+    pin_configured: undefined,
     bindings: bindings.filter((binding) => binding.employee_id === employee.id)
   })));
 });
 
 router.post('/api/employees', (req, res) => {
-  const { name, cpf, registration, deviceEmployeeNo, deviceIds = [] } = req.body ?? {};
+  const { name, cpf, registration, deviceEmployeeNo, deviceIds = [], pin } = req.body ?? {};
   const centralNo = deviceEmployeeNo || registration || cpf;
   if (!name || !centralNo) {
     return res.status(400).json({ error: 'name e pelo menos matrícula, CPF ou deviceEmployeeNo são obrigatórios' });
@@ -92,17 +105,48 @@ router.post('/api/employees', (req, res) => {
   if (deviceEmployeeNo && !/^\d{11}$/.test(deviceEmployeeNo)) {
     return res.status(400).json({ error: 'deviceEmployeeNo (PIS/PASEP) deve ter 11 dígitos numéricos' });
   }
+  if (pin != null && !isValidPin(pin)) {
+    return res.status(400).json({ error: 'PIN do ponto deve ter exatamente 4 dígitos numéricos' });
+  }
+
   // O REP Topdata identifica o servidor pelo PIS/PASEP: não se usa CPF nem matrícula no lugar dele.
   const ids: string[] = Array.isArray(deviceIds) ? deviceIds : [];
-  if (!deviceEmployeeNo && ids.length) {
-    const topdata = db.prepare(`SELECT 1 FROM devices WHERE id IN (${ids.map(() => '?').join(',')}) AND upper(vendor)='TOPDATA'`).get(...ids);
-    if (topdata) return res.status(400).json({ error: 'Informe o PIS/PASEP (deviceEmployeeNo) para cadastrar este servidor no REP Topdata.' });
+  let hasTopdata = false;
+  if (ids.length) {
+    hasTopdata = !!db.prepare(`SELECT 1 FROM devices WHERE id IN (${ids.map(() => '?').join(',')}) AND upper(vendor)='TOPDATA'`).get(...ids);
+  }
+  if (!deviceEmployeeNo && hasTopdata) {
+    return res.status(400).json({ error: 'Informe o PIS/PASEP (deviceEmployeeNo) para cadastrar este servidor no REP Topdata.' });
+  }
+  if (hasTopdata && !pin) {
+    return res.status(400).json({ error: 'Informe o PIN de 4 dígitos para cadastrar este servidor no REP Topdata.' });
+  }
+
+  let encryptedPin: ReturnType<typeof encryptPin> | null = null;
+  try {
+    if (pin) encryptedPin = encryptPin(pin);
+  } catch (error) {
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'pin_encryption_error'
+    });
   }
 
   const result = db.prepare(`
-    INSERT INTO employees(name,cpf,registration,device_employee_no)
-    VALUES(?,?,?,?)
-  `).run(name, cpf ?? null, registration ?? null, String(centralNo));
+    INSERT INTO employees(
+      name,cpf,registration,device_employee_no,
+      pin_ciphertext,pin_iv,pin_tag,pin_updated_at
+    )
+    VALUES(?,?,?,?,?,?,?,CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
+  `).run(
+    name,
+    cpf ?? null,
+    registration ?? null,
+    String(centralNo),
+    encryptedPin?.ciphertext ?? null,
+    encryptedPin?.iv ?? null,
+    encryptedPin?.tag ?? null,
+    encryptedPin?.ciphertext ?? null
+  );
 
   const employeeId = Number(result.lastInsertRowid);
   for (const deviceId of Array.isArray(deviceIds) ? deviceIds : []) {
@@ -117,8 +161,44 @@ router.post('/api/employees', (req, res) => {
   }
 
   const jobs = queueEmployeeSync(employeeId);
-  audit('EMPLOYEE_CREATE', 'employee', employeeId, { name, cpf, registration, deviceIds });
+  audit('EMPLOYEE_CREATE', 'employee', employeeId, {
+    name,
+    cpf,
+    registration,
+    deviceIds,
+    pinConfigured: !!encryptedPin
+  });
   res.status(201).json({ id: employeeId, syncJobs: jobs });
+});
+
+router.put('/api/employees/:id/pin', (req, res) => {
+  const employeeId = Number(req.params.id);
+  const pin = req.body?.pin;
+
+  if (!employeeId) return res.status(400).json({ error: 'employeeId inválido' });
+  if (!isValidPin(pin)) {
+    return res.status(400).json({ error: 'PIN do ponto deve ter exatamente 4 dígitos numéricos' });
+  }
+
+  let encrypted: ReturnType<typeof encryptPin>;
+  try {
+    encrypted = encryptPin(pin);
+  } catch (error) {
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'pin_encryption_error'
+    });
+  }
+
+  const result = db.prepare(`
+    UPDATE employees
+    SET pin_ciphertext=?, pin_iv=?, pin_tag=?, pin_updated_at=CURRENT_TIMESTAMP
+    WHERE id=?
+  `).run(encrypted.ciphertext, encrypted.iv, encrypted.tag, employeeId);
+
+  if (result.changes !== 1) return res.status(404).json({ error: 'employee_not_found' });
+
+  audit('EMPLOYEE_PIN_SET', 'employee', employeeId, { pinConfigured: true });
+  res.json({ ok: true, pinConfigured: true });
 });
 
 router.post('/api/employees/:id/bindings', (req, res) => {
