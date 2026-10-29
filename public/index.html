@@ -593,9 +593,18 @@ function toast(msg){
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true},3500);
 }
 
-async function load(){
+let loadInFlight=false;
+async function load(options={}){
+  if(loadInFlight) return;
+  loadInFlight=true;
+
+  const silent=!!options.silent;
   const btn=document.getElementById('btnRefresh');
-  btn.disabled=true;btn.classList.add('busy');
+  if(!silent){
+    btn.disabled=true;
+    btn.classList.add('busy');
+  }
+
   try{
   const [health,devices,employees]=await Promise.all([
     fetch('/health').then(r=>r.json()),
@@ -704,7 +713,13 @@ async function load(){
       <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button>${whatsappButton}${syncButton}${activeButton}</div></td>
     </tr>`;
   }).join(''):'<tr><td colspan="9" class="empty">Nenhum servidor cadastrado.</td></tr>';
-  } finally { btn.disabled=false;btn.classList.remove('busy'); }
+  } finally {
+    loadInFlight=false;
+    if(!silent){
+      btn.disabled=false;
+      btn.classList.remove('busy');
+    }
+  }
 }
 
 async function downloadAttendance(format,btn){
@@ -1147,6 +1162,13 @@ document.querySelectorAll('nav.sub a').forEach(a=>a.addEventListener('click',()=
 const exportNow=new Date();
 document.getElementById('exportPeriod').value=
   `${exportNow.getFullYear()}-${String(exportNow.getMonth()+1).padStart(2,'0')}`;
+
+const AUTO_REFRESH_MS=5000;
+setInterval(()=>{
+  if(document.hidden) return;
+  if(document.querySelector('dialog[open]')) return;
+  load({silent:true}).catch(err=>console.error(err));
+},AUTO_REFRESH_MS);
 
 load().catch(err=>console.error(err));
 </script>
