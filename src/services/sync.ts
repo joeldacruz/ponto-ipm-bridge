@@ -54,6 +54,7 @@ export function queueEmployeeSync(employeeId: number, deviceId?: string, allowIm
   const tx = db.transaction(() => {
     const ids: number[] = [];
     for (const binding of bindings) {
+      const importedOverride = allowImported && binding.sync_status === IMPORTED_STATUS;
       const payload = {
         employee: {
           id: employee.id,
@@ -67,6 +68,9 @@ export function queueEmployeeSync(employeeId: number, deviceId?: string, allowIm
           deviceEmployeeNo: binding.device_employee_no,
           cardNo: binding.card_no,
           enabled: !!binding.enabled
+        },
+        syncMeta: {
+          importedOverride
         }
       };
       const result = insert.run(binding.device_id, employee.id, 'UPSERT_EMPLOYEE', JSON.stringify(payload));
@@ -149,11 +153,23 @@ export function completeJob(jobId: number, ok: boolean, errorMessage?: string) {
   `).run(status, ok ? null : errorMessage ?? 'Falha não detalhada', jobId);
 
   if (job.employee_id) {
+    let bindingStatus = status;
+    if (!ok) {
+      try {
+        const payload = JSON.parse(job.payload_json);
+        if (payload?.syncMeta?.importedOverride === true) {
+          bindingStatus = IMPORTED_STATUS;
+        }
+      } catch {
+        // Payload legado/inválido: mantém o comportamento anterior (ERROR).
+      }
+    }
+
     db.prepare(`
       UPDATE employee_device_bindings
       SET sync_status=?, sync_error=?, last_synced_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE last_synced_at END,
           updated_at=CURRENT_TIMESTAMP
       WHERE employee_id=? AND device_id=?
-    `).run(status, ok ? null : errorMessage ?? 'Falha não detalhada', ok ? 1 : 0, job.employee_id, job.device_id);
+    `).run(bindingStatus, ok ? null : errorMessage ?? 'Falha não detalhada', ok ? 1 : 0, job.employee_id, job.device_id);
   }
 }
