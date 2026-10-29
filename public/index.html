@@ -1163,7 +1163,7 @@ const exportNow=new Date();
 document.getElementById('exportPeriod').value=
   `${exportNow.getFullYear()}-${String(exportNow.getMonth()+1).padStart(2,'0')}`;
 
-const AUTO_REFRESH_MS=5000;
+const AUTO_REFRESH_MS=2000;
 setInterval(()=>{
   if(document.hidden) return;
   if(document.querySelector('dialog[open]')) return;
