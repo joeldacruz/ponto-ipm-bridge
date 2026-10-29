@@ -18,6 +18,7 @@ $sources = @(
   "TopdataDeviceClient.cs",
   "TopdataAfdParser.cs",
   "TopdataSdkReader.cs",
+  "TopdataEmployeeWriter.cs",
   "Models.cs"
 ) | ForEach-Object { Join-Path $agent $_ }
 
@@ -27,6 +28,7 @@ $exe = Join-Path $out "PontoCamara.TopdataAgent.exe"
   /reference:System.dll `
   /reference:System.Core.dll `
   /reference:System.Configuration.dll `
+  /reference:System.Security.dll `
   /reference:System.Web.Extensions.dll `
   $sources
 
