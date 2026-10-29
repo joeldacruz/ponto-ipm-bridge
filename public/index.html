@@ -473,7 +473,7 @@ async function load(){
       ? `<button type="button" class="btn ghost sm" disabled title="Servidor desativado">${ico('sync')}Sincronizar</button>`
       : bs.length
         ? (bs.every(b=>b.sync_status==='IMPORTED')
-          ? `<button type="button" class="btn ghost sm" disabled title="Cadastro importado: sem escrita no REP">${ico('sync')}Sincronizar</button>`
+          ? bs.map(b=>`<button type="button" class="btn ghost sm" onclick="syncImportedEmployee(${Number(e.id)},'${esc(b.device_id)}',this)" title="Liberação explícita somente para este REP">${ico('sync')}Enviar ao REP</button>`).join('')
           : `<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`)
         : '';
     const activeButton=isActive
@@ -517,6 +517,34 @@ async function setEmployeeActive(id,active,btn){
     await load();
   }catch(err){
     toast(`Falha ao ${action} servidor.`);
+    btn.disabled=false;
+  }
+}
+
+async function syncImportedEmployee(id,deviceId,btn){
+  const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
+  const binding=(employee?.bindings||[]).find(b=>String(b.device_id)===String(deviceId));
+  if(!employee||!binding) return;
+
+  const ok=confirm(
+    `Enviar ${employee.name} especificamente para ${binding.device_name}?\n\n`+
+    'Este vínculo foi importado e normalmente fica protegido contra escrita. '+
+    'Esta liberação vale somente para este servidor e este REP; os demais importados continuam bloqueados.'
+  );
+  if(!ok) return;
+
+  btn.disabled=true;
+  try{
+    const r=await fetch(`/api/employees/${id}/sync`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({deviceId,allowImported:true})
+    });
+    const b=await r.json().catch(()=>({}));
+    toast(r.ok?'Envio ao REP enfileirado.':(b.message||b.error||'Falha ao liberar envio ao REP.'));
+    await load();
+  }catch(err){
+    toast('Falha ao liberar envio ao REP.');
     btn.disabled=false;
   }
 }
