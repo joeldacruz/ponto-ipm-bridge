@@ -1,6 +1,5 @@
 using System;
-using System.Net.Sockets;
-using System.Threading;
+using System.Net.NetworkInformation;
 
 namespace PontoCamara.TopdataAgent
 {
@@ -19,30 +18,21 @@ namespace PontoCamara.TopdataAgent
 
         public bool IsReachable()
         {
-            TcpClient client = new TcpClient();
+            // Nao abra uma conexao TCP de sondagem na porta 51000.
+            // O SDK Topdata usa essa porta e alguns REPs aceitam uma unica
+            // sessao por vez; sondagens frequentes podem concorrer com o SDK
+            // e deixar muitas conexoes em FIN_WAIT_2.
             try
             {
-                IAsyncResult ar = client.BeginConnect(_host, _port, null, null);
-                WaitHandle wait = ar.AsyncWaitHandle;
-                try
+                using (Ping ping = new Ping())
                 {
-                    if (!wait.WaitOne(TimeSpan.FromSeconds(3), false))
-                        return false;
-                    client.EndConnect(ar);
-                    return client.Connected;
-                }
-                finally
-                {
-                    wait.Close();
+                    PingReply reply = ping.Send(_host, 1000);
+                    return reply != null && reply.Status == IPStatus.Success;
                 }
             }
             catch
             {
                 return false;
-            }
-            finally
-            {
-                client.Close();
             }
         }
 
