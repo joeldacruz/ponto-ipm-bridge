@@ -88,10 +88,27 @@ namespace PontoCamara.TopdataAgent
         {
             AgentSettings settings = ReadSettings();
             ApiClient api = new ApiClient(settings.ServerUrl, settings.AgentToken);
-            TopdataDeviceClient device = new TopdataDeviceClient(settings.DeviceHost, settings.DevicePort);
 
             string sdkPath = Environment.GetEnvironmentVariable("TOPDATA_SDK_PATH");
             string communicationKey = Environment.GetEnvironmentVariable("TOPDATA_COMM_KEY");
+            string employeeWriteFlag = Environment.GetEnvironmentVariable("TOPDATA_ENABLE_EMPLOYEE_WRITE") ?? "";
+            string employeeWriteAllowPis = Environment.GetEnvironmentVariable("TOPDATA_WRITE_ALLOW_PIS") ?? "";
+            bool employeeWriteEnabled =
+                employeeWriteFlag == "1"
+                || employeeWriteFlag.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || employeeWriteFlag.Equals("yes", StringComparison.OrdinalIgnoreCase);
+
+            TopdataEmployeeWriter employeeWriter = new TopdataEmployeeWriter(
+                settings.DeviceHost,
+                communicationKey,
+                sdkPath,
+                employeeWriteEnabled,
+                employeeWriteAllowPis);
+
+            TopdataDeviceClient device = new TopdataDeviceClient(
+                settings.DeviceHost,
+                settings.DevicePort,
+                employeeWriter);
             string initialNsrText = Environment.GetEnvironmentVariable("TOPDATA_INITIAL_NSR") ?? "43106";
             int initialNsr = Int32.Parse(initialNsrText);
 
@@ -109,7 +126,10 @@ namespace PontoCamara.TopdataAgent
             Console.WriteLine("Ponto Camara - Agente Topdata");
             Console.WriteLine("REP: {0}:{1}", settings.DeviceHost, settings.DevicePort);
             Console.WriteLine("Servidor: {0}", settings.ServerUrl);
-            Console.WriteLine("Modo seguro: escrita no REP bloqueada ate integrar SDK oficial.");
+            Console.WriteLine(
+                employeeWriter.IsConfigured
+                    ? "Escrita de empregados: habilitada com allowlist e verificacao por leitura."
+                    : "Modo seguro: escrita de empregados desabilitada ou sem allowlist/configuracao.");
 
             while (true)
             {
