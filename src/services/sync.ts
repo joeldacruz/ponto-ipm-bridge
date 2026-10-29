@@ -6,37 +6,45 @@ import { decryptPin } from '../security/pin.js';
 export const IMPORTED_STATUS = 'IMPORTED';
 
 // Quantos vínculos ativos do servidor poderiam ser enviados ao REP e quantos estão bloqueados por IMPORTED.
-export function countSyncTargets(employeeId: number, deviceId?: string) {
+export function countSyncTargets(employeeId: number, deviceId?: string, allowImported = false) {
+  if (allowImported && !deviceId) throw new Error('allow_imported_requires_device');
+
   const rows = db.prepare(`
     SELECT b.sync_status
     FROM employee_device_bindings b
     JOIN devices d ON d.id=b.device_id
     WHERE b.employee_id=? AND (? IS NULL OR b.device_id=?) AND b.enabled=1 AND d.active=1
   `).all(employeeId, deviceId ?? null, deviceId ?? null) as Array<{ sync_status: string }>;
+
   const blocked = rows.filter((r) => r.sync_status === IMPORTED_STATUS).length;
-  return { eligible: rows.length - blocked, blocked };
+  const eligible = rows.filter((r) => allowImported || r.sync_status !== IMPORTED_STATUS).length;
+  return { eligible, blocked };
 }
 
-export function queueEmployeeSync(employeeId: number, deviceId?: string) {
+export function queueEmployeeSync(employeeId: number, deviceId?: string, allowImported = false) {
   const employee = db.prepare('SELECT * FROM employees WHERE id=?').get(employeeId) as any;
   if (!employee) throw new Error('employee_not_found');
   if (!employee.active) throw new Error('employee_inactive');
 
-  const bindings = deviceId
+  if (allowImported && !deviceId) throw new Error('allow_imported_requires_device');
+
+  const candidates = deviceId
     ? db.prepare(`
         SELECT b.*, d.vendor, d.model, d.agent_id
         FROM employee_device_bindings b
         JOIN devices d ON d.id=b.device_id
         WHERE b.employee_id=? AND b.device_id=? AND b.enabled=1 AND d.active=1
-          AND b.sync_status <> 'IMPORTED'
       `).all(employeeId, deviceId) as any[]
     : db.prepare(`
         SELECT b.*, d.vendor, d.model, d.agent_id
         FROM employee_device_bindings b
         JOIN devices d ON d.id=b.device_id
         WHERE b.employee_id=? AND b.enabled=1 AND d.active=1
-          AND b.sync_status <> 'IMPORTED'
       `).all(employeeId) as any[];
+
+  const bindings = candidates.filter((binding) =>
+    allowImported || binding.sync_status !== IMPORTED_STATUS
+  );
 
   const insert = db.prepare(`
     INSERT INTO sync_jobs(device_id, employee_id, operation, payload_json)
