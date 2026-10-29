@@ -14,6 +14,7 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Configuration" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
   <ItemGroup>
@@ -22,6 +23,7 @@
     <Compile Include="TopdataDeviceClient.cs" />
     <Compile Include="TopdataAfdParser.cs" />
     <Compile Include="TopdataSdkReader.cs" />
+    <Compile Include="TopdataEmployeeWriter.cs" />
     <Compile Include="Models.cs" />
   </ItemGroup>
   <ItemGroup>
