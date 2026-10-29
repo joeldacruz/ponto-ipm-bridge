@@ -170,6 +170,26 @@
     .pin-dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
     .pin-state{white-space:nowrap}
 
+    /* Confirmação de envio ao REP */
+    .rep-confirm-dialog{max-width:500px}
+    .rep-confirm-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:18px}
+    .rep-confirm-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:none;background:var(--brand-soft);color:var(--brand);font-size:22px}
+    .rep-confirm-head h3{margin:1px 0 4px}
+    .rep-confirm-head p{margin:0}
+    .rep-confirm-target{display:grid;grid-template-columns:90px 1fr;gap:9px 14px;padding:14px 16px;border:1px solid var(--line);border-radius:11px;background:#f8faf9;font-size:13.5px}
+    .rep-confirm-target span{color:var(--muted)}
+    .rep-confirm-target strong{color:var(--ink);font-weight:650}
+    .rep-confirm-note{display:flex;gap:10px;align-items:flex-start;margin-top:14px;padding:11px 13px;border-radius:10px;background:var(--info-soft);color:#274d73;font-size:12.8px;line-height:1.45}
+    .rep-confirm-note svg{font-size:17px;margin-top:1px}
+    .rep-confirm-dialog .row{margin-top:20px}
+    .rep-confirm-dialog .row .btn{min-width:118px}
+    @media(max-width:520px){
+      .rep-confirm-target{grid-template-columns:1fr;gap:2px}
+      .rep-confirm-target strong{margin-bottom:7px}
+      .rep-confirm-dialog .row{display:grid;grid-template-columns:1fr 1fr}
+      .rep-confirm-dialog .row .btn{width:100%;min-width:0}
+    }
+
     /* Responsivo */
     @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:repeat(3,1fr)}.formgrid .field:first-child{grid-column:1/-1}}
     @media(max-width:760px){
@@ -364,6 +384,38 @@
   </form>
 </dialog>
 
+<dialog id="repConfirmDialog" class="pin-dialog rep-confirm-dialog" aria-labelledby="repConfirmTitle">
+  <div class="box">
+    <div class="rep-confirm-head">
+      <span class="rep-confirm-icon" aria-hidden="true"><svg><use href="#i-sync"/></svg></span>
+      <div>
+        <h3 id="repConfirmTitle">Enviar servidor ao REP</h3>
+        <p>Confirme os dados antes de autorizar a gravação no equipamento.</p>
+      </div>
+    </div>
+
+    <div class="rep-confirm-target">
+      <span>Servidor</span><strong id="repConfirmEmployee">—</strong>
+      <span>Equipamento</span><strong id="repConfirmDevice">—</strong>
+    </div>
+
+    <div class="rep-confirm-note">
+      <svg><use href="#i-shield"/></svg>
+      <div>
+        Esta autorização vale somente para este servidor e este REP.
+        Antes de concluir, o agente fará backup, gravação e releitura de confirmação.
+      </div>
+    </div>
+
+    <div class="row">
+      <button type="button" class="btn ghost" onclick="closeRepConfirm(false)">Cancelar</button>
+      <button type="button" class="btn" id="repConfirmSubmit" onclick="closeRepConfirm(true)">
+        <svg><use href="#i-sync"/></svg>Enviar ao REP
+      </button>
+    </div>
+  </div>
+</dialog>
+
 <footer class="site"><span>Câmara Municipal de Três Barras · Santa Catarina</span><span>Ponto Eletrônico</span></footer>
 <div class="toast" id="toast" hidden></div>
 
@@ -542,6 +594,32 @@ async function waitForSyncJob(jobId,timeoutMs=120000){
   throw new Error('Tempo limite aguardando confirmação do REP.');
 }
 
+let repConfirmResolve=null;
+
+function confirmRepSend(employee,binding){
+  const dialog=document.getElementById('repConfirmDialog');
+  document.getElementById('repConfirmEmployee').textContent=employee.name;
+  document.getElementById('repConfirmDevice').textContent=binding.device_name||binding.device_id||'REP';
+  return new Promise(resolve=>{
+    repConfirmResolve=resolve;
+    dialog.showModal();
+    setTimeout(()=>document.getElementById('repConfirmSubmit').focus(),0);
+  });
+}
+
+function closeRepConfirm(confirmed){
+  const dialog=document.getElementById('repConfirmDialog');
+  if(dialog.open) dialog.close();
+  const resolve=repConfirmResolve;
+  repConfirmResolve=null;
+  if(resolve) resolve(!!confirmed);
+}
+
+document.getElementById('repConfirmDialog').addEventListener('cancel',ev=>{
+  ev.preventDefault();
+  closeRepConfirm(false);
+});
+
 async function sendEmployeeToRep(id,deviceId,allowImported,btn){
   const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
   const binding=(employee?.bindings||[]).find(b=>String(b.device_id)===String(deviceId));
@@ -552,11 +630,7 @@ async function sendEmployeeToRep(id,deviceId,allowImported,btn){
     return;
   }
 
-  const ok=confirm(
-    `Enviar ${employee.name} para ${binding.device_name}?\n\n`+
-    'A autorização vale somente para este servidor e este REP. '+
-    'O agente fará backup, gravação e releitura de confirmação.'
-  );
+  const ok=await confirmRepSend(employee,binding);
   if(!ok) return;
 
   const original=btn.innerHTML;
