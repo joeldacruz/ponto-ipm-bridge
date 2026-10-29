@@ -1,6 +1,3 @@
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 const nodemailer = require('nodemailer') as any;
 
 export function isGmailConfigured(): boolean {
