@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#14402f">
+  <title>Entrar · Ponto Eletrônico</title>
+  <style>
+    :root{
+      --ink:#14212b;--muted:#6b7886;--bg:#f3f5f4;--surface:#fff;
+      --line:#e3e8e6;--brand:#14402f;--brand-2:#1d5a42;
+      --soft:#e8f1ed;--bad:#a63a32;--ok:#17693f;
+      --font:Inter,"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#eef3f0,#f7f8f7);font-family:var(--font);color:var(--ink)}
+    .shell{width:min(440px,100%)}
+    .brand{text-align:center;margin-bottom:18px}
+    .brand .org{font-size:12px;font-weight:700;color:#a97d1c;text-transform:uppercase;letter-spacing:.09em}
+    .brand h1{margin:5px 0 2px;font-size:23px;color:var(--brand)}
+    .brand p{margin:0;color:var(--muted);font-size:13.5px}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px;box-shadow:0 14px 40px rgba(20,33,43,.08)}
+    h2{margin:0 0 5px;font-size:20px}
+    .intro{margin:0 0 20px;color:var(--muted);font-size:13.5px}
+    label{display:block;font-size:13px;font-weight:650;color:#44525e;margin-top:14px}
+    input{width:100%;margin-top:6px;padding:11px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;outline:0}
+    input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14)}
+    .btn{width:100%;margin-top:18px;padding:11px 14px;border:0;border-radius:9px;background:var(--brand);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+    .btn:hover{background:var(--brand-2)}.btn:disabled{opacity:.6;cursor:wait}
+    .link{display:block;width:100%;margin-top:13px;border:0;background:none;color:var(--brand-2);font:inherit;font-size:13px;font-weight:650;cursor:pointer;text-align:center}
+    .channels{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+    .channel{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;font-size:13px}
+    .channel:has(input:checked){border-color:var(--brand-2);background:var(--soft)}
+    .channel input{width:auto;margin:0;accent-color:var(--brand)}
+    .status{min-height:20px;margin-top:14px;font-size:13px;color:var(--muted)}
+    .status.bad{color:var(--bad)}.status.ok{color:var(--ok)}
+    .step[hidden]{display:none}
+    .hint{font-size:12px;color:var(--muted);margin-top:5px}
+    .foot{text-align:center;margin-top:15px;font-size:11.5px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand">
+      <div class="org">Três Barras · SC</div>
+      <h1>Câmara Municipal de Três Barras</h1>
+      <p>Ponto Eletrônico</p>
+    </div>
+
+    <div class="card">
+      <section class="step" id="loginStep">
+        <h2>Entrar</h2>
+        <p class="intro">Acesso restrito aos usuários autorizados.</p>
+        <form id="loginForm">
+          <label>E-mail
+            <input id="loginEmail" type="email" autocomplete="username" required placeholder="seu@email.com">
+          </label>
+          <label>Senha
+            <input id="loginPassword" type="password" autocomplete="current-password" required>
+          </label>
+          <button class="btn" type="submit">Entrar</button>
+        </form>
+        <button class="link" type="button" onclick="showRecovery()">Recuperar ou definir senha</button>
+        <div class="status" id="loginStatus" role="status"></div>
+      </section>
+
+      <section class="step" id="recoveryStep" hidden>
+        <h2>Recuperar senha</h2>
+        <p class="intro">Enviaremos um código de 6 dígitos válido por 15 minutos.</p>
+        <form id="recoveryForm">
+          <label>E-mail cadastrado
+            <input id="recoveryEmail" type="email" autocomplete="email" required>
+          </label>
+          <div class="channels">
+            <label class="channel"><input type="radio" name="channel" value="EMAIL" checked> E-mail</label>
+            <label class="channel"><input type="radio" name="channel" value="WHATSAPP"> WhatsApp</label>
+          </div>
+          <button class="btn" type="submit">Enviar código</button>
+        </form>
+        <button class="link" type="button" onclick="showLogin()">Voltar para o login</button>
+        <div class="status" id="recoveryStatus" role="status"></div>
+      </section>
+
+      <section class="step" id="resetStep" hidden>
+        <h2>Definir nova senha</h2>
+        <p class="intro">Informe o código recebido e escolha sua nova senha.</p>
+        <form id="resetForm">
+          <label>Código
+            <input id="resetCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required placeholder="000000">
+          </label>
+          <label>Nova senha
+            <input id="resetPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password" required>
+          </label>
+          <div class="hint">Use pelo menos 10 caracteres.</div>
+          <label>Confirmar senha
+            <input id="resetPassword2" type="password" minlength="10" maxlength="128" autocomplete="new-password" required>
+          </label>
+          <button class="btn" type="submit">Salvar nova senha</button>
+        </form>
+        <button class="link" type="button" onclick="showRecovery()">Enviar outro código</button>
+        <div class="status" id="resetStatus" role="status"></div>
+      </section>
+    </div>
+
+    <div class="foot">Sistema interno · Câmara Municipal de Três Barras</div>
+  </div>
+
+<script>
+const byId=id=>document.getElementById(id);
+let recoveryEmail='';
+
+function setStep(id){
+  ['loginStep','recoveryStep','resetStep'].forEach(x=>byId(x).hidden=x!==id);
+}
+function showLogin(){setStep('loginStep')}
+function showRecovery(){
+  const source=byId('loginEmail').value.trim();
+  if(source) byId('recoveryEmail').value=source;
+  setStep('recoveryStep');
+}
+function status(id,msg,kind=''){
+  const el=byId(id);el.textContent=msg;el.className='status '+kind;
+}
+function safeNext(){
+  const raw=new URLSearchParams(location.search).get('next')||'/';
+  return raw.startsWith('/')&&!raw.startsWith('//')?raw:'/';
+}
+
+byId('resetCode').addEventListener('input',e=>{
+  e.target.value=e.target.value.replace(/\D/g,'').slice(0,6);
+});
+
+byId('loginForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const btn=ev.submitter;btn.disabled=true;
+  status('loginStatus','Entrando...');
+  try{
+    const r=await fetch('/api/auth/login',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        email:byId('loginEmail').value.trim(),
+        password:byId('loginPassword').value
+      })
+    });
+    const b=await r.json().catch(()=>({}));
+    if(!r.ok){
+      status('loginStatus',b.message||'Não foi possível entrar.','bad');
+      if(b.error==='password_not_set') showRecovery();
+      return;
+    }
+    location.href=safeNext();
+  }catch{
+    status('loginStatus','Falha de comunicação com o servidor.','bad');
+  }finally{btn.disabled=false}
+});
+
+byId('recoveryForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const btn=ev.submitter;btn.disabled=true;
+  recoveryEmail=byId('recoveryEmail').value.trim();
+  const channel=document.querySelector('input[name="channel"]:checked').value;
+  status('recoveryStatus','Enviando código...');
+  try{
+    const r=await fetch('/api/auth/recovery/request',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:recoveryEmail,channel})
+    });
+    const b=await r.json().catch(()=>({}));
+    if(!r.ok){
+      status('recoveryStatus',b.message||'Não foi possível enviar o código.','bad');
+      return;
+    }
+    status('recoveryStatus',b.message||'Código enviado.','ok');
+    setStep('resetStep');
+    setTimeout(()=>byId('resetCode').focus(),0);
+  }catch{
+    status('recoveryStatus','Falha de comunicação com o servidor.','bad');
+  }finally{btn.disabled=false}
+});
+
+byId('resetForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const p1=byId('resetPassword').value;
+  const p2=byId('resetPassword2').value;
+  if(p1!==p2){status('resetStatus','As senhas não conferem.','bad');return}
+  const btn=ev.submitter;btn.disabled=true;
+  status('resetStatus','Salvando...');
+  try{
+    const r=await fetch('/api/auth/recovery/reset',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        email:recoveryEmail||byId('recoveryEmail').value.trim(),
+        code:byId('resetCode').value,
+        password:p1
+      })
+    });
+    const b=await r.json().catch(()=>({}));
+    if(!r.ok){
+      status('resetStatus',b.message||'Código inválido.','bad');
+      return;
+    }
+    byId('loginEmail').value=recoveryEmail;
+    byId('loginPassword').value='';
+    showLogin();
+    status('loginStatus','Senha definida. Agora entre com a nova senha.','ok');
+    setTimeout(()=>byId('loginPassword').focus(),0);
+  }catch{
+    status('resetStatus','Falha de comunicação com o servidor.','bad');
+  }finally{btn.disabled=false}
+});
+
+fetch('/api/auth/me').then(r=>{if(r.ok)location.href=safeNext()}).catch(()=>{});
+</script>
+</body>
+</html>
