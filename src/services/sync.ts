@@ -20,6 +20,7 @@ export function countSyncTargets(employeeId: number, deviceId?: string) {
 export function queueEmployeeSync(employeeId: number, deviceId?: string) {
   const employee = db.prepare('SELECT * FROM employees WHERE id=?').get(employeeId) as any;
   if (!employee) throw new Error('employee_not_found');
+  if (!employee.active) throw new Error('employee_inactive');
 
   const bindings = deviceId
     ? db.prepare(`
@@ -82,6 +83,12 @@ export function leaseJobs(agentId: string, limit = 20) {
       FROM sync_jobs j
       JOIN devices d ON d.id=j.device_id
       WHERE d.agent_id=? AND d.active=1 AND j.status='PENDING'
+        AND (
+          j.employee_id IS NULL OR EXISTS (
+            SELECT 1 FROM employees e
+            WHERE e.id=j.employee_id AND e.active=1
+          )
+        )
       ORDER BY j.id
       LIMIT ?
     `).all(agentId, safeLimit) as any[];
