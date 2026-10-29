@@ -9,15 +9,19 @@ O agente já:
 - testa TCP do REP em `10.20.20.222:51000`;
 - envia heartbeat para o servidor;
 - consulta a fila de sincronização;
-- devolve erro explícito `SDK_TOPDATA_NOT_CONNECTED` para tarefas de escrita enquanto a DLL oficial ainda não estiver ligada.
+- lê integralmente os empregados atuais antes de qualquer escrita;
+- grava somente a configuração de empregados pelo gerenciador específico do SDK, sem chamar `EnviaConfiguracoes()`;
+- reconstrói a lista completa, preservando nome, PIS, cartão, PIN e biometria dos registros existentes;
+- confirma a escrita por nova leitura integral do REP;
+- salva backup local criptografado por DPAPI antes da alteração.
 
-Ele **não** finge cadastro, coleta ou alteração no relógio.
+A escrita continua **bloqueada por padrão** e exige habilitação + allowlist de PIS/PASEP.
 
 ## Requisito do SDK oficial
 
 A Topdata documenta Windows + .NET Framework 3.5 para o SDK Inner REP e fornece exemplos C# específicos para `Inner Rep < 2.0`.
 
-Depois de baixar o pacote oficial, o próximo passo é substituir o corpo de `TopdataDeviceClient.Execute` por chamadas reais da interface correspondente ao firmware encontrado no relógio.
+O agente carrega a DLL por reflexão a partir de `TOPDATA_SDK_PATH`. Para empregados, ele usa o gerenciador interno específico de empregados do SDK e não executa a rotina genérica de configurações do REP.
 
 ## Configuração
 
@@ -44,3 +48,15 @@ A coleta real do Inner REP usa variáveis de ambiente locais, sem versionar a ch
 O checkpoint fica em `%ProgramData%\PontoCamara\<deviceId>.nsr`.
 
 Na primeira execução o agente importa o NSR inicial e, nas seguintes, consulta o último NSR disponível e coleta apenas a diferença. O servidor deduplica por `sourceId = deviceId:nsr`.
+
+
+## Escrita controlada de empregados
+
+Variáveis adicionais:
+
+- `TOPDATA_ENABLE_EMPLOYEE_WRITE=1`: habilita o caminho de escrita;
+- `TOPDATA_WRITE_ALLOW_PIS=20079252537`: allowlist de PIS/PASEP separados por vírgula; use `*` somente depois da homologação.
+
+Sem as duas condições, o agente recusa a tarefa. Antes da gravação ele lê todos os empregados, bloqueia lista vazia/incompleta, detecta PIS/cartão duplicado e cria backup protegido em `%ProgramData%\PontoCamara\backups`.
+
+Para o primeiro teste, mantenha a allowlist restrita a um único servidor.
