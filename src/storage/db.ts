@@ -118,6 +118,27 @@ CREATE TABLE IF NOT EXISTS exports (
   event_count INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS attendance_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL UNIQUE,
+  employee_id INTEGER NOT NULL,
+  destination TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING'
+    CHECK(status IN ('PENDING','SENDING','DONE','ERROR')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  next_attempt_at TEXT,
+  sent_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(event_id) REFERENCES device_events(id),
+  FOREIGN KEY(employee_id) REFERENCES employees(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_notifications_status
+  ON attendance_notifications(status, next_attempt_at);
 `);
 
 function ensureColumn(table: string, column: string, definition: string) {
@@ -133,6 +154,8 @@ ensureColumn('employees', 'pin_ciphertext', 'TEXT');
 ensureColumn('employees', 'pin_iv', 'TEXT');
 ensureColumn('employees', 'pin_tag', 'TEXT');
 ensureColumn('employees', 'pin_updated_at', 'TEXT');
+ensureColumn('employees', 'whatsapp_number', 'TEXT');
+ensureColumn('employees', 'whatsapp_attendance_enabled', 'INTEGER NOT NULL DEFAULT 0');
 
 const topdataHost = process.env.TOPDATA_HOST;
 if (topdataHost) {
