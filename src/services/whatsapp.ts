@@ -135,8 +135,8 @@ export function startWhatsappWorker(): void {
   }
 
   const intervalSeconds = Math.max(
-    5,
-    Number(process.env.WHATSAPP_WORKER_INTERVAL_SECONDS || 10)
+    2,
+    Number(process.env.WHATSAPP_WORKER_INTERVAL_SECONDS || 5)
   );
 
   console.log(
