@@ -27,9 +27,9 @@
 
     /* Cabeçalho */
     .topbar{background:var(--brand);color:#fff;font-size:12px;letter-spacing:.02em}
-    .topbar .in{max-width:1240px;margin:auto;padding:6px 24px;display:flex;justify-content:space-between;gap:12px;opacity:.9}
+    .topbar .in{max-width:1440px;margin:auto;padding:6px 24px;display:flex;justify-content:space-between;gap:12px;opacity:.9}
     header.site{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;box-shadow:0 1px 0 rgba(20,33,43,.03)}
-    header.site .in{max-width:1240px;margin:auto;padding:10px 24px;display:flex;align-items:center;gap:16px}
+    header.site .in{max-width:1440px;margin:auto;padding:10px 24px;display:flex;align-items:center;gap:16px}
     .brand{display:flex;align-items:center;gap:14px;min-width:0;text-decoration:none;color:inherit}
     .crest{width:52px;height:56px;flex:none;display:grid;place-items:center}
     .crest img{max-width:100%;max-height:100%;object-fit:contain;display:block}
@@ -46,14 +46,14 @@
 
     /* Navegação */
     nav.sub{background:var(--surface);border-bottom:1px solid var(--line)}
-    nav.sub .in{max-width:1240px;margin:auto;padding:0 24px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+    nav.sub .in{max-width:1440px;margin:auto;padding:0 24px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
     nav.sub .in::-webkit-scrollbar{display:none}
     nav.sub a{padding:12px 14px;font-size:13.5px;font-weight:500;color:var(--ink-2);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap;display:flex;gap:7px;align-items:center}
     nav.sub a:hover{color:var(--brand)}
     nav.sub a.on{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
 
     /* Layout */
-    main{max-width:1240px;margin:auto;padding:24px 24px 40px}
+    main{max-width:1440px;margin:auto;padding:24px 24px 40px}
     .pagehead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
     .pagehead h1{margin:0;font-size:24px;letter-spacing:-.01em}
     .pagehead p{margin:3px 0 0;font-size:14px}
@@ -150,6 +150,37 @@
     .wa-btn.empty{color:#7d8993;background:#f5f7f6;border-color:#d9dfdc}
     .wa-btn .wa-chevron{font-size:12px;opacity:.72}
 
+    /* Tabela de servidores: compacta no desktop sem cortar as ações */
+    #servidores .tw{overflow-x:auto}
+    #servidores table{table-layout:auto;min-width:1180px}
+    #servidores th,#servidores td{padding-left:10px;padding-right:10px}
+    #servidores th:first-child,#servidores td:first-child{padding-left:16px}
+    #servidores th:last-child,#servidores td:last-child{padding-right:16px}
+    #servidores td:nth-child(1){width:86px;white-space:nowrap}
+    #servidores td:nth-child(2){min-width:155px}
+    #servidores td:nth-child(3){width:118px;white-space:nowrap}
+    #servidores td:nth-child(4){width:104px;white-space:nowrap}
+    #servidores td:nth-child(5){min-width:145px}
+    #servidores td:nth-child(6){width:118px;white-space:nowrap}
+    #servidores td:nth-child(7){width:118px;white-space:nowrap}
+    #servidores td:nth-child(8){width:120px;white-space:nowrap}
+    #servidores td:nth-child(9){width:280px}
+    #servidores .t-name{line-height:1.35}
+    #servidores .chip{white-space:normal;line-height:1.3}
+    #servidores .actions{min-width:270px}
+    #servidores .actions .btn.sm{padding:5px 8px}
+    #servidores .actions .btn.sm svg{font-size:13px}
+
+    @media(min-width:761px) and (max-width:1250px){
+      #servidores table{min-width:1120px}
+      #servidores th,#servidores td{padding-left:8px;padding-right:8px;font-size:13px}
+      #servidores td:nth-child(2){min-width:135px}
+      #servidores td:nth-child(5){min-width:128px}
+      #servidores td:nth-child(9){width:250px}
+      #servidores .actions{min-width:245px;gap:5px}
+      #servidores .actions .btn.sm{font-size:11.5px;padding:5px 7px}
+    }
+
     /* Formulário */
     .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr .8fr;gap:16px}
     .field label,.field .lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2)}
@@ -177,7 +208,7 @@
 
     .note{margin-top:18px;display:flex;gap:12px;align-items:flex-start;padding:14px 18px;background:var(--brand-soft);border:1px solid #cfe1d8;border-radius:var(--radius);font-size:13.5px;color:#27493b}
     .note svg{font-size:18px;color:var(--brand);margin-top:1px}
-    footer.site{max-width:1240px;margin:auto;padding:0 24px 30px;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    footer.site{max-width:1440px;margin:auto;padding:0 24px 30px;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
     .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:50;max-width:calc(100% - 32px)}
     .toast[hidden]{display:none}
@@ -236,6 +267,9 @@
       .panel-b{padding:16px}
       /* tabelas viram cartões */
       .tw{overflow:visible}
+      #servidores table{min-width:0;table-layout:auto}
+      #servidores td:nth-child(n){width:auto;min-width:0;white-space:normal}
+      #servidores .actions{min-width:0}
       table.cards,table.cards tbody,table.cards tr,table.cards td{display:block;width:100%}
       table.cards thead{display:none}
       table.cards tbody tr{padding:12px 14px;border-bottom:1px solid var(--line)}
