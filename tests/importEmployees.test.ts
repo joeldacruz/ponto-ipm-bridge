@@ -147,22 +147,42 @@ test('batidas históricas passam a exibir o nome em GET /api/events/attendance',
   } finally { server.close(); }
 });
 
-async function withApi<T>(fn: (post: (url: string, body?: unknown) => Promise<{ status: number; json: any }>) => Promise<T>): Promise<T> {
+async function withApi<T>(
+  fn: (
+    post: (
+      url: string,
+      body?: unknown,
+      method?: 'POST' | 'PUT'
+    ) => Promise<{ status: number; json: any }>
+  ) => Promise<T>
+): Promise<T> {
   const app = express(); app.use(express.json()); app.use(router);
   const server = app.listen(0);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const post = async (url: string, body: unknown = {}) => {
-    const r = await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    return { status: r.status, json: await r.json() };
+  const post = async (url: string, body: unknown = {}, method: 'POST' | 'PUT' = 'POST') => {
+    const r = await fetch(base + url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const text = await r.text();
+    return {
+      status: r.status,
+      json: text ? JSON.parse(text) : {}
+    };
   };
   try { return await fn(post); } finally { server.close(); }
 }
 
 async function setTestPin(
-  post: (url: string, body?: unknown) => Promise<{ status: number; json: any }>,
+  request: (
+    url: string,
+    body?: unknown,
+    method?: 'POST' | 'PUT'
+  ) => Promise<{ status: number; json: any }>,
   employeeId: number
 ) {
-  const r = await post(`/api/employees/${employeeId}/pin`, { pin: '0427' });
+  const r = await request(`/api/employees/${employeeId}/pin`, { pin: '0427' }, 'PUT');
   assert.equal(r.status, 200);
 }
 
@@ -538,9 +558,11 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
     assert.match(deactivated.message, /Nenhuma exclusão foi enviada ao REP/);
 
     assert.equal((db.prepare('SELECT active FROM employees WHERE id=?').get(created.id) as any).active, 0);
-    const cancelled = db.prepare('SELECT status,error_message FROM sync_jobs').get() as any;
-    assert.equal(cancelled.status, 'ERROR');
-    assert.equal(cancelled.error_message, 'EMPLOYEE_DEACTIVATED');
+    assert.equal(count('sync_jobs'), 0);
+    assert.equal(
+      (db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s,
+      'READY'
+    );
     assert.equal(count('employee_device_bindings'), 1);
 
     const syncInactive = await fetch(base + `/api/employees/${created.id}/sync`, {
