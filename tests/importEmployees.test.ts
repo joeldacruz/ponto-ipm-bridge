@@ -243,6 +243,29 @@ test('override explícito libera somente o servidor importado e o REP informado,
   assert.equal(other.s, 'IMPORTED');
 });
 
+test('falha no primeiro envio explícito restaura a proteção IMPORTED', async () => {
+  wipe();
+  runImport(db, [A], { apply: true });
+  const id = (db.prepare('SELECT id FROM employees').get() as any).id;
+
+  let jobId = 0;
+  await withApi(async (post) => {
+    const r = await post(`/api/employees/${id}/sync`, { deviceId: DEV, allowImported: true });
+    assert.equal(r.status, 200);
+    jobId = Number(r.json.jobs[0]);
+  });
+
+  assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s, 'PENDING');
+
+  const { completeJob } = await import('../src/services/sync.js');
+  completeJob(jobId, false, 'SDK_TOPDATA_NOT_CONNECTED');
+
+  const binding = db.prepare('SELECT sync_status AS s,sync_error AS e FROM employee_device_bindings').get() as any;
+  assert.equal(binding.s, 'IMPORTED');
+  assert.equal(binding.e, 'SDK_TOPDATA_NOT_CONNECTED');
+  assert.equal((db.prepare('SELECT status FROM sync_jobs WHERE id=?').get(jobId) as any).status, 'ERROR');
+});
+
 test('regressão: vínculo normal continua sincronizando e servidor inexistente dá 404', async () => {
   wipe();
   await withApi(async (post) => {
