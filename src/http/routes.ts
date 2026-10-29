@@ -1,7 +1,12 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { db } from '../storage/db.js';
 import { listAttendance, saveEvents } from '../services/events.js';
-import { exportGenericCsv } from '../services/exporter.js';
+import {
+  buildAttendanceAfdDownload,
+  buildGenericCsvDownload,
+  exportGenericCsv
+} from '../services/exporter.js';
+import { isWhatsappGatewayConfigured, normalizeWhatsappNumber } from '../services/whatsapp.js';
 import { completeJob, countSyncTargets, leaseJobs, queueEmployeeSync } from '../services/sync.js';
 import type { DeviceEvent } from '../core/types.js';
 import { encryptPin, isValidPin } from '../security/pin.js';
@@ -67,6 +72,7 @@ router.get('/api/employees', (_req, res) => {
   const employees = db.prepare(`
     SELECT
       id, name, cpf, registration, device_employee_no, active, created_at,
+      whatsapp_number, whatsapp_attendance_enabled,
       CASE
         WHEN pin_ciphertext IS NOT NULL AND pin_iv IS NOT NULL AND pin_tag IS NOT NULL THEN 1
         ELSE 0
@@ -86,6 +92,10 @@ router.get('/api/employees', (_req, res) => {
     ...employee,
     pinConfigured: !!employee.pin_configured,
     pin_configured: undefined,
+    whatsappNumber: employee.whatsapp_number ?? null,
+    whatsappAttendanceEnabled: !!employee.whatsapp_attendance_enabled,
+    whatsapp_number: undefined,
+    whatsapp_attendance_enabled: undefined,
     bindings: bindings.filter((binding) => binding.employee_id === employee.id)
   })));
 });
@@ -165,6 +175,68 @@ router.post('/api/employees', (req, res) => {
     pinConfigured: !!encryptedPin
   });
   res.status(201).json({ id: employeeId, syncJobs: jobs });
+});
+
+router.put('/api/employees/:id/whatsapp', (req, res) => {
+  const employeeId = Number(req.params.id);
+  const enabled = req.body?.enabled;
+  const rawNumber = req.body?.number;
+
+  if (!employeeId) return res.status(400).json({ error: 'employeeId inválido' });
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled deve ser booleano' });
+  }
+
+  let number: string | null = null;
+  try {
+    number = normalizeWhatsappNumber(rawNumber);
+  } catch {
+    return res.status(400).json({
+      error: 'whatsapp_number_invalid',
+      message: 'Informe um WhatsApp brasileiro com DDD, por exemplo 47999999999.'
+    });
+  }
+
+  if (enabled && !number) {
+    return res.status(400).json({
+      error: 'whatsapp_number_required',
+      message: 'Informe o número antes de ativar a confirmação de batidas.'
+    });
+  }
+
+  const result = db.prepare(`
+    UPDATE employees
+    SET whatsapp_number=?,
+        whatsapp_attendance_enabled=?
+    WHERE id=?
+  `).run(number, enabled ? 1 : 0, employeeId);
+
+  if (result.changes !== 1) return res.status(404).json({ error: 'employee_not_found' });
+
+  audit('EMPLOYEE_WHATSAPP_UPDATE', 'employee', employeeId, {
+    enabled,
+    numberConfigured: !!number
+  });
+
+  res.json({
+    ok: true,
+    whatsappNumber: number,
+    whatsappAttendanceEnabled: enabled,
+    gatewayConfigured: isWhatsappGatewayConfigured()
+  });
+});
+
+router.get('/api/whatsapp/status', (_req, res) => {
+  const pending = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM attendance_notifications
+    WHERE status IN ('PENDING','SENDING','ERROR') AND attempts < 5
+  `).get() as { total: number };
+
+  res.json({
+    configured: isWhatsappGatewayConfigured(),
+    pending: pending.total
+  });
 });
 
 router.put('/api/employees/:id/active', (req, res) => {
@@ -455,6 +527,70 @@ router.post('/api/agent/events', requireAgent, (req, res) => {
   `).run(deviceId);
   audit('EVENTS_INGEST', 'device', deviceId, { received: events.length, inserted });
   res.status(201).json({ received: events.length, inserted });
+});
+
+router.get('/api/exports/afd/:period', (req, res) => {
+  const period = req.params.period;
+  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : '';
+
+  if (!/^\d{4}-\d{2}$/.test(period)) {
+    return res.status(400).json({ error: 'Período deve ser AAAA-MM' });
+  }
+  if (!deviceId) return res.status(400).json({ error: 'deviceId é obrigatório' });
+
+  const device = db.prepare('SELECT id, vendor FROM devices WHERE id=?').get(deviceId) as
+    | { id: string; vendor: string }
+    | undefined;
+  if (!device) return res.status(404).json({ error: 'device_not_found' });
+  if (String(device.vendor).toUpperCase() !== 'TOPDATA') {
+    return res.status(409).json({
+      error: 'afd_raw_only_topdata',
+      message: 'O AFD bruto está habilitado somente para o REP Topdata validado.'
+    });
+  }
+
+  const out = buildAttendanceAfdDownload(period, deviceId);
+  if (out.count === 0) {
+    return res.status(404).json({
+      error: 'no_attendance_for_period',
+      message: 'Nenhuma marcação AFD válida foi encontrada para este REP e período.',
+      skipped: out.skipped
+    });
+  }
+
+  audit('ATTENDANCE_EXPORT_AFD', 'device', deviceId, {
+    period,
+    count: out.count,
+    skipped: out.skipped
+  });
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+  res.send(out.content);
+});
+
+router.get('/api/exports/csv/:period', (req, res) => {
+  const period = req.params.period;
+  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : '';
+
+  if (!/^\d{4}-\d{2}$/.test(period)) {
+    return res.status(400).json({ error: 'Período deve ser AAAA-MM' });
+  }
+  if (!deviceId) return res.status(400).json({ error: 'deviceId é obrigatório' });
+
+  const device = db.prepare('SELECT id FROM devices WHERE id=?').get(deviceId);
+  if (!device) return res.status(404).json({ error: 'device_not_found' });
+
+  const out = buildGenericCsvDownload(period, deviceId);
+
+  audit('ATTENDANCE_EXPORT_CSV', 'device', deviceId, {
+    period,
+    count: out.count
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+  res.send(out.content);
 });
 
 router.post('/api/exports/:period', (req, res) => {
