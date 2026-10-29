@@ -383,4 +383,83 @@ test('CLI: simulação não grava; --apply faz backup com SHA-256 e não cria sy
   assert.ok(!real.stdout.includes(A.deviceEmployeeNo)); // identificadores saem mascarados no relatório
 });
 
+test('desativar/reativar preserva histórico e não envia exclusão ao REP', async () => {
+  wipe();
+  addRawEvent('012345678901', 700, 'LINHA-AFD-DESATIVACAO');
+  const before = snapshot();
+  const fp = eventsFingerprint(db);
+
+  const app = express();
+  app.use(express.json());
+  app.use(router);
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+  try {
+    const create = await fetch(base + '/api/employees', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'SERVIDOR DESATIVAVEL',
+        registration: '7000-00',
+        deviceEmployeeNo: '12345678901',
+        deviceIds: [DEV]
+      })
+    });
+    assert.equal(create.status, 201);
+    const created = await create.json() as any;
+    assert.equal(count('sync_jobs'), 1);
+    assert.equal((db.prepare('SELECT status FROM sync_jobs').get() as any).status, 'PENDING');
+
+    const deactivate = await fetch(base + `/api/employees/${created.id}/active`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: false })
+    });
+    assert.equal(deactivate.status, 200);
+    const deactivated = await deactivate.json() as any;
+    assert.equal(deactivated.active, false);
+    assert.match(deactivated.message, /Nenhuma exclusão foi enviada ao REP/);
+
+    assert.equal((db.prepare('SELECT active FROM employees WHERE id=?').get(created.id) as any).active, 0);
+    const cancelled = db.prepare('SELECT status,error_message FROM sync_jobs').get() as any;
+    assert.equal(cancelled.status, 'ERROR');
+    assert.equal(cancelled.error_message, 'EMPLOYEE_DEACTIVATED');
+    assert.equal(count('employee_device_bindings'), 1);
+
+    const syncInactive = await fetch(base + `/api/employees/${created.id}/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    assert.equal(syncInactive.status, 409);
+    assert.equal((await syncInactive.json() as any).error, 'employee_inactive');
+    assert.equal(count('sync_jobs'), 1);
+
+    const reactivate = await fetch(base + `/api/employees/${created.id}/active`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: true })
+    });
+    assert.equal(reactivate.status, 200);
+    assert.equal((db.prepare('SELECT active FROM employees WHERE id=?').get(created.id) as any).active, 1);
+    assert.equal(count('sync_jobs'), 1); // reativar não sincroniza automaticamente
+
+    assert.deepEqual(snapshot(), before);
+    assert.equal(eventsFingerprint(db), fp);
+    const actions = db.prepare(`
+      SELECT action FROM audit_log
+      WHERE entity_type='employee' AND entity_id=?
+      ORDER BY id
+    `).all(String(created.id)) as any[];
+    assert.deepEqual(actions.map((row) => row.action), [
+      'EMPLOYEE_CREATE',
+      'EMPLOYEE_DEACTIVATE',
+      'EMPLOYEE_ACTIVATE'
+    ]);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(() => { db.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
