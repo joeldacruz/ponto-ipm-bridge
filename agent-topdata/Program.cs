@@ -36,6 +36,37 @@ namespace PontoCamara.TopdataAgent
             return s;
         }
 
+        private static string ValidateRecordHeader(int expectedNsr, string rawLine)
+        {
+            if (rawLine == null)
+                throw new InvalidOperationException("Registro Topdata vazio.");
+
+            string raw = rawLine.Trim();
+
+            if (raw.Length < 10)
+                throw new InvalidOperationException(
+                    "Registro Topdata menor que o cabecalho minimo.");
+
+            string nsrText = raw.Substring(0, 9);
+            int actualNsr;
+
+            if (!Int32.TryParse(nsrText, out actualNsr))
+                throw new InvalidOperationException(
+                    "NSR Topdata invalido.");
+
+            if (actualNsr != expectedNsr)
+                throw new InvalidOperationException(
+                    "NSR retornado difere do solicitado.");
+
+            char type = raw[9];
+
+            if (!Char.IsDigit(type))
+                throw new InvalidOperationException(
+                    "Tipo de registro Topdata invalido.");
+
+            return type.ToString();
+        }
+
         private static void CollectAttendance(
             ApiClient api,
             TopdataSdkReader reader,
@@ -54,36 +85,87 @@ namespace PontoCamara.TopdataAgent
             }
 
             TopdataReadResult probe = reader.ReadNsr(checkpoint);
-            TopdataEvent probeEvent = TopdataAfdParser.ParseAttendance(deviceId, probe.rawLine);
+
+            string probeType = ValidateRecordHeader(
+                checkpoint,
+                probe.rawLine);
 
             if (!hasCheckpoint)
             {
-                api.SendEvents(deviceId, new TopdataEvent[] { probeEvent });
-                File.WriteAllText(checkpointFile, checkpoint.ToString());
-                Console.WriteLine("NSR inicial importado: " + checkpoint);
+                if (probeType != "3")
+                    throw new InvalidOperationException(
+                        "NSR inicial nao e uma marcacao tipo 3.");
+
+                TopdataEvent probeEvent =
+                    TopdataAfdParser.ParseAttendance(
+                        deviceId,
+                        probe.rawLine);
+
+                api.SendEvents(
+                    deviceId,
+                    new TopdataEvent[] { probeEvent });
+
+                File.WriteAllText(
+                    checkpointFile,
+                    checkpoint.ToString());
+
+                Console.WriteLine(
+                    "NSR inicial importado: " + checkpoint);
             }
 
             int lastAvailable = checkpoint;
+
             if (!String.IsNullOrEmpty(probe.lastNsr))
-                Int32.TryParse(probe.lastNsr, out lastAvailable);
+            {
+                int parsedLast;
+
+                if (Int32.TryParse(probe.lastNsr, out parsedLast))
+                    lastAvailable = parsedLast;
+            }
 
             if (lastAvailable <= checkpoint)
                 return;
 
-            for (int nsr = checkpoint + 1; nsr <= lastAvailable; nsr++)
+            for (
+                int nsr = checkpoint + 1;
+                nsr <= lastAvailable;
+                nsr++)
             {
                 TopdataReadResult read = reader.ReadNsr(nsr);
-                TopdataEvent evt = TopdataAfdParser.ParseAttendance(deviceId, read.rawLine);
 
-                if (evt.nsr != nsr)
-                    throw new InvalidOperationException("NSR retornado difere do solicitado.");
+                string type = ValidateRecordHeader(
+                    nsr,
+                    read.rawLine);
 
-                api.SendEvents(deviceId, new TopdataEvent[] { evt });
-                File.WriteAllText(checkpointFile, nsr.ToString());
-                Console.WriteLine("NSR coletado: " + nsr);
+                if (type == "3")
+                {
+                    TopdataEvent evt =
+                        TopdataAfdParser.ParseAttendance(
+                            deviceId,
+                            read.rawLine);
+
+                    api.SendEvents(
+                        deviceId,
+                        new TopdataEvent[] { evt });
+
+                    Console.WriteLine(
+                        "NSR coletado: " + nsr);
+                }
+                else
+                {
+                    Console.WriteLine(
+                        "NSR ignorado: "
+                        + nsr
+                        + " tipo "
+                        + type
+                        + " (nao e marcacao)");
+                }
+
+                File.WriteAllText(
+                    checkpointFile,
+                    nsr.ToString());
             }
         }
-
         private static void Main(string[] args)
         {
             AgentSettings settings = ReadSettings();
