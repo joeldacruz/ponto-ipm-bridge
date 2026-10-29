@@ -194,6 +194,55 @@ test('proteção: servidor com vínculo IMPORTED e outro normal sincroniza só o
   assert.deepEqual(jobs.map((j) => j.device_id), ['rep-outro']); // nunca o rep-topdata-02
 });
 
+test('proteção: override de IMPORTED exige um REP explícito', async () => {
+  wipe(); addEvent(A.deviceEmployeeNo, 20);
+  runImport(db, [A], { apply: true });
+  const id = (db.prepare('SELECT id FROM employees').get() as any).id;
+  const before = eventsFingerprint(db);
+
+  await withApi(async (post) => {
+    const r = await post(`/api/employees/${id}/sync`, { allowImported: true });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.error, 'allow_imported_requires_device');
+  });
+
+  assert.equal(count('sync_jobs'), 0);
+  assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s, 'IMPORTED');
+  assert.equal(eventsFingerprint(db), before);
+});
+
+test('override explícito libera somente o servidor importado e o REP informado, com auditoria', async () => {
+  wipe(); addEvent(A.deviceEmployeeNo, 21);
+  runImport(db, [A, B], { apply: true });
+  const id = (db.prepare('SELECT id FROM employees WHERE registration=?').get(A.registration) as any).id;
+  const before = eventsFingerprint(db);
+
+  await withApi(async (post) => {
+    const r = await post(`/api/employees/${id}/sync`, { deviceId: DEV, allowImported: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.jobs.length, 1);
+  });
+
+  const job = db.prepare('SELECT device_id,employee_id,operation,status FROM sync_jobs').get() as any;
+  assert.equal(job.device_id, DEV);
+  assert.equal(job.employee_id, id);
+  assert.equal(job.operation, 'UPSERT_EMPLOYEE');
+  assert.equal(job.status, 'PENDING');
+  assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings WHERE employee_id=?').get(id) as any).s, 'PENDING');
+
+  const auditRow = db.prepare(`
+    SELECT action,detail_json FROM audit_log
+    WHERE action='EMPLOYEE_SYNC_IMPORTED_OVERRIDE' AND entity_id=?
+    ORDER BY id DESC LIMIT 1
+  `).get(String(id)) as any;
+  assert.equal(auditRow.action, 'EMPLOYEE_SYNC_IMPORTED_OVERRIDE');
+  assert.equal(JSON.parse(auditRow.detail_json).deviceId, DEV);
+  assert.equal(eventsFingerprint(db), before);
+
+  const other = db.prepare('SELECT sync_status AS s FROM employee_device_bindings b JOIN employees e ON e.id=b.employee_id WHERE e.registration=?').get(B.registration) as any;
+  assert.equal(other.s, 'IMPORTED');
+});
+
 test('regressão: vínculo normal continua sincronizando e servidor inexistente dá 404', async () => {
   wipe();
   await withApi(async (post) => {
