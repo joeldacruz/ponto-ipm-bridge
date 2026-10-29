@@ -217,7 +217,7 @@ namespace PontoCamara.TopdataAgent
             if (quantity <= 0)
                 throw new InvalidOperationException("REP_SEM_EMPREGADOS_OU_LEITURA_INCOMPLETA");
 
-            ValidateNoUnsupportedEmployeeFeatures(sdk, quantity);
+            Array original = GetSdkEmployeeMatrix(sdk, quantity);
 
             List<TopdataEmployeeRecord> rows = new List<TopdataEmployeeRecord>();
             int i;
@@ -238,6 +238,7 @@ namespace PontoCamara.TopdataAgent
                 row.Pin = ReadString(sdk, "LeSenha");
                 row.VerifyBiometrics = ParseSdkBoolean(ReadString(sdk, "LeVerificarBiometria"));
 
+                ValidateSdkEmployeeMatrixRow(original, i, row);
                 ValidatePreserved(row, i);
                 rows.Add(row);
             }
@@ -245,7 +246,7 @@ namespace PontoCamara.TopdataAgent
             return rows;
         }
 
-        private void ValidateNoUnsupportedEmployeeFeatures(object sdk, int quantity)
+        private Array GetSdkEmployeeMatrix(object sdk, int quantity)
         {
             FieldInfo field = _sdkType.GetField(
                 "_arrEmpregadosSolicitados",
@@ -254,32 +255,68 @@ namespace PontoCamara.TopdataAgent
             if (field == null)
                 throw new InvalidOperationException("SDK_LISTA_ORIGINAL_NAO_LOCALIZADA");
 
-            IList original = field.GetValue(sdk) as IList;
-            if (original == null || original.Count != quantity)
+            Array original = field.GetValue(sdk) as Array;
+
+            if (original == null || original.Rank != 2)
+                throw new InvalidOperationException("SDK_LISTA_ORIGINAL_FORMATO_INVALIDO");
+
+            if (original.GetLength(0) != quantity)
                 throw new InvalidOperationException("SDK_LISTA_ORIGINAL_INCOMPLETA");
 
-            int i;
-            for (i = 0; i < original.Count; i++)
-            {
-                object employee = original[i];
-                if (employee == null)
-                    throw new InvalidOperationException("SDK_EMPREGADO_ORIGINAL_NULO_" + i);
+            if (original.GetLength(1) != 6)
+                throw new InvalidOperationException("SDK_LISTA_ORIGINAL_LAYOUT_DESCONHECIDO");
 
-                Type type = employee.GetType();
-                PropertyInfo bars = type.GetProperty("CartaoBarras");
-                PropertyInfo prox = type.GetProperty("CartaoProx");
-                PropertyInfo doubleCheck = type.GetProperty("DuplaVerificacao");
-
-                ulong barsValue = bars == null ? 0UL : Convert.ToUInt64(bars.GetValue(employee, null));
-                ulong proxValue = prox == null ? 0UL : Convert.ToUInt64(prox.GetValue(employee, null));
-                bool doubleValue = doubleCheck != null && Convert.ToBoolean(doubleCheck.GetValue(employee, null));
-
-                if (barsValue != 0UL || proxValue != 0UL || doubleValue)
-                    throw new InvalidOperationException(
-                        "EMPREGADO_EXISTENTE_USA_RECURSO_NAO_RECONSTRUIDO_" + i);
-            }
+            return original;
         }
 
+        private void ValidateSdkEmployeeMatrixRow(
+            Array original,
+            int index,
+            TopdataEmployeeRecord row)
+        {
+            string matrixName = MatrixString(original, index, 0);
+            string matrixDisplay = MatrixString(original, index, 1);
+            string matrixPis = MatrixString(original, index, 2);
+            string matrixPin = MatrixString(original, index, 3);
+            string matrixBio = MatrixString(original, index, 4);
+            string matrixCard = MatrixString(original, index, 5);
+
+            if (matrixName != (row.Name ?? ""))
+                throw new InvalidOperationException(
+                    "SDK_MATRIZ_NOME_DIVERGENTE_" + index);
+
+            if (matrixDisplay != (row.DisplayName ?? ""))
+                throw new InvalidOperationException(
+                    "SDK_MATRIZ_DISPLAY_DIVERGENTE_" + index);
+
+            if (NormalizePis(matrixPis) != row.Pis)
+                throw new InvalidOperationException(
+                    "SDK_MATRIZ_PIS_DIVERGENTE_" + index);
+
+            if (matrixPin != (row.Pin ?? ""))
+                throw new InvalidOperationException(
+                    "SDK_MATRIZ_PIN_DIVERGENTE_" + index);
+
+            if (ParseSdkBoolean(matrixBio) != row.VerifyBiometrics)
+                throw new InvalidOperationException(
+                    "SDK_MATRIZ_BIO_DIVERGENTE_" + index);
+
+            if (NormalizeCard(matrixCard) != row.Card)
+                throw new InvalidOperationException(
+                    "SDK_MATRIZ_CARTAO_DIVERGENTE_" + index);
+        }
+
+        private static string MatrixString(
+            Array matrix,
+            int row,
+            int column)
+        {
+            object value = matrix.GetValue(row, column);
+
+            return value == null
+                ? ""
+                : Convert.ToString(value).Trim();
+        }
         private void ValidatePreserved(TopdataEmployeeRecord row, int index)
         {
             if (String.IsNullOrEmpty(row.Name))
