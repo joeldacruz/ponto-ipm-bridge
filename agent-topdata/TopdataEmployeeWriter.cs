@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -216,6 +217,8 @@ namespace PontoCamara.TopdataAgent
             if (quantity <= 0)
                 throw new InvalidOperationException("REP_SEM_EMPREGADOS_OU_LEITURA_INCOMPLETA");
 
+            ValidateNoUnsupportedEmployeeFeatures(sdk, quantity);
+
             List<TopdataEmployeeRecord> rows = new List<TopdataEmployeeRecord>();
             int i;
             for (i = 0; i < quantity; i++)
@@ -240,6 +243,41 @@ namespace PontoCamara.TopdataAgent
             }
 
             return rows;
+        }
+
+        private void ValidateNoUnsupportedEmployeeFeatures(object sdk, int quantity)
+        {
+            FieldInfo field = _sdkType.GetField(
+                "_arrEmpregadosSolicitados",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (field == null)
+                throw new InvalidOperationException("SDK_LISTA_ORIGINAL_NAO_LOCALIZADA");
+
+            IList original = field.GetValue(sdk) as IList;
+            if (original == null || original.Count != quantity)
+                throw new InvalidOperationException("SDK_LISTA_ORIGINAL_INCOMPLETA");
+
+            int i;
+            for (i = 0; i < original.Count; i++)
+            {
+                object employee = original[i];
+                if (employee == null)
+                    throw new InvalidOperationException("SDK_EMPREGADO_ORIGINAL_NULO_" + i);
+
+                Type type = employee.GetType();
+                PropertyInfo bars = type.GetProperty("CartaoBarras");
+                PropertyInfo prox = type.GetProperty("CartaoProx");
+                PropertyInfo doubleCheck = type.GetProperty("DuplaVerificacao");
+
+                ulong barsValue = bars == null ? 0UL : Convert.ToUInt64(bars.GetValue(employee, null));
+                ulong proxValue = prox == null ? 0UL : Convert.ToUInt64(prox.GetValue(employee, null));
+                bool doubleValue = doubleCheck != null && Convert.ToBoolean(doubleCheck.GetValue(employee, null));
+
+                if (barsValue != 0UL || proxValue != 0UL || doubleValue)
+                    throw new InvalidOperationException(
+                        "EMPREGADO_EXISTENTE_USA_RECURSO_NAO_RECONSTRUIDO_" + i);
+            }
         }
 
         private void ValidatePreserved(TopdataEmployeeRecord row, int index)
