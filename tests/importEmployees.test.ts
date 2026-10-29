@@ -10,6 +10,8 @@ import type { AddressInfo } from 'node:net';
 // Banco temporário com o schema real do projeto (src/storage/db.ts cria as tabelas).
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-employees-'));
 process.env.DB_PATH = path.join(tmp, 'ponto.db');
+process.env.AGENT_TOKEN = 'test-agent-token-portal-write';
+process.env.PIN_ENCRYPTION_KEY = '11'.repeat(32);
 delete process.env.TOPDATA_HOST;
 
 let db: typeof import('../src/storage/db.js')['db'];
@@ -156,16 +158,32 @@ async function withApi<T>(fn: (post: (url: string, body?: unknown) => Promise<{ 
   try { return await fn(post); } finally { server.close(); }
 }
 
-test('proteção: sincronizar vínculo IMPORTED é recusado (409), sem sync_jobs e sem alterar ponto', async () => {
+async function setTestPin(
+  post: (url: string, body?: unknown) => Promise<{ status: number; json: any }>,
+  employeeId: number
+) {
+  const r = await post(`/api/employees/${employeeId}/pin`, { pin: '0427' });
+  assert.equal(r.status, 200);
+}
+
+test('proteção: portal exige REP explícito, PIN e mantém IMPORTED bloqueado sem override', async () => {
   wipe(); addEvent(A.deviceEmployeeNo, 1);
   runImport(db, [A], { apply: true });
   const id = (db.prepare('SELECT id FROM employees').get() as any).id;
   const before = eventsFingerprint(db);
   await withApi(async (post) => {
     const geral = await post(`/api/employees/${id}/sync`);
-    assert.equal(geral.status, 409); assert.equal(geral.json.error, 'sync_blocked_imported');
+    assert.equal(geral.status, 400);
+    assert.equal(geral.json.error, 'portal_write_requires_device');
+
+    const semPin = await post(`/api/employees/${id}/sync`, { deviceId: DEV });
+    assert.equal(semPin.status, 409);
+    assert.equal(semPin.json.error, 'pin_required');
+
+    await setTestPin(post, id);
     const porRep = await post(`/api/employees/${id}/sync`, { deviceId: DEV });
     assert.equal(porRep.status, 409);
+    assert.equal(porRep.json.error, 'sync_blocked_imported');
   });
   assert.equal(count('sync_jobs'), 0);
   assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s, 'IMPORTED');
@@ -182,12 +200,12 @@ test('proteção: POST /bindings em vínculo IMPORTED mantém o status e não en
   assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s, 'IMPORTED');
 });
 
-test('proteção: servidor com vínculo IMPORTED e outro normal sincroniza só o normal', async () => {
+test('portal: envio direcionado para vínculo normal não-Topdata continua funcionando', async () => {
   db.prepare(`INSERT OR IGNORE INTO devices(id,name,vendor,role,transport) VALUES('rep-outro','REP Outro','ACME','PRIMARY','DIRECT')`).run();
   const id = (db.prepare('SELECT id FROM employees').get() as any).id;
   db.prepare('INSERT INTO employee_device_bindings(employee_id,device_id,device_employee_no) VALUES(?,?,?)').run(id, 'rep-outro', 'X1');
   await withApi(async (post) => {
-    const r = await post(`/api/employees/${id}/sync`);
+    const r = await post(`/api/employees/${id}/sync`, { deviceId: 'rep-outro' });
     assert.equal(r.status, 200); assert.equal(r.json.jobs.length, 1);
   });
   const jobs = db.prepare('SELECT device_id FROM sync_jobs').all() as any[];
@@ -203,7 +221,7 @@ test('proteção: override de IMPORTED exige um REP explícito', async () => {
   await withApi(async (post) => {
     const r = await post(`/api/employees/${id}/sync`, { allowImported: true });
     assert.equal(r.status, 400);
-    assert.equal(r.json.error, 'allow_imported_requires_device');
+    assert.equal(r.json.error, 'portal_write_requires_device');
   });
 
   assert.equal(count('sync_jobs'), 0);
@@ -218,16 +236,27 @@ test('override explícito libera somente o servidor importado e o REP informado,
   const before = eventsFingerprint(db);
 
   await withApi(async (post) => {
+    await setTestPin(post, id);
     const r = await post(`/api/employees/${id}/sync`, { deviceId: DEV, allowImported: true });
     assert.equal(r.status, 200);
     assert.equal(r.json.jobs.length, 1);
+
+    const duplicate = await post(`/api/employees/${id}/sync`, { deviceId: DEV, allowImported: true });
+    assert.equal(duplicate.status, 409);
+    assert.equal(duplicate.json.error, 'sync_already_pending');
   });
 
-  const job = db.prepare('SELECT device_id,employee_id,operation,status FROM sync_jobs').get() as any;
+  const job = db.prepare('SELECT device_id,employee_id,operation,status,payload_json FROM sync_jobs').get() as any;
   assert.equal(job.device_id, DEV);
   assert.equal(job.employee_id, id);
   assert.equal(job.operation, 'UPSERT_EMPLOYEE');
   assert.equal(job.status, 'PENDING');
+  const payload = JSON.parse(job.payload_json);
+  assert.equal(payload.syncMeta.portalApproved, true);
+  assert.equal(payload.syncMeta.approvedPis, A.deviceEmployeeNo);
+  assert.equal(payload.syncMeta.approvedDeviceId, DEV);
+  assert.match(payload.syncMeta.signature, /^[0-9a-f]{64}$/);
+  assert.equal(payload.employee.pin, undefined);
   assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings WHERE employee_id=?').get(id) as any).s, 'PENDING');
 
   const auditRow = db.prepare(`
@@ -250,6 +279,7 @@ test('falha no primeiro envio explícito restaura a proteção IMPORTED', async 
 
   let jobId = 0;
   await withApi(async (post) => {
+    await setTestPin(post, id);
     const r = await post(`/api/employees/${id}/sync`, { deviceId: DEV, allowImported: true });
     assert.equal(r.status, 200);
     jobId = Number(r.json.jobs[0]);
@@ -266,14 +296,26 @@ test('falha no primeiro envio explícito restaura a proteção IMPORTED', async 
   assert.equal((db.prepare('SELECT status FROM sync_jobs WHERE id=?').get(jobId) as any).status, 'ERROR');
 });
 
-test('regressão: vínculo normal continua sincronizando e servidor inexistente dá 404', async () => {
+test('portal: cadastro Topdata fica READY e só cria job após envio explícito', async () => {
   wipe();
   await withApi(async (post) => {
-    const c = await post('/api/employees', { name: 'NOVO', registration: '5', deviceEmployeeNo: '12345678901', deviceIds: [DEV] });
-    assert.equal(c.status, 201); assert.equal(c.json.syncJobs.length, 1);
-    const r = await post(`/api/employees/${c.json.id}/sync`);
-    assert.equal(r.status, 200); assert.equal(r.json.jobs.length, 1);
-    assert.equal((await post('/api/employees/99999/sync')).status, 404);
+    const c = await post('/api/employees', {
+      name: 'NOVO',
+      registration: '5',
+      deviceEmployeeNo: '12345678901',
+      pin: '0427',
+      deviceIds: [DEV]
+    });
+    assert.equal(c.status, 201);
+    assert.deepEqual(c.json.syncJobs, []);
+    assert.equal(count('sync_jobs'), 0);
+    assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s, 'READY');
+
+    const r = await post(`/api/employees/${c.json.id}/sync`, { deviceId: DEV });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.jobs.length, 1);
+
+    assert.equal((await post('/api/employees/99999/sync', { deviceId: DEV })).status, 404);
   });
 });
 
@@ -368,8 +410,11 @@ test('caso real simulado: 24 servidores + 2 batidas Topdata de 12 posições →
   assert.equal(eventsFingerprint(db), fp);
 
   await withApi(async (post) => {
-    const emps = db.prepare('SELECT id FROM employees').all() as any[];
-    for (const e of emps) assert.equal((await post(`/api/employees/${e.id}/sync`)).status, 409);
+    const first = (db.prepare('SELECT id FROM employees ORDER BY id LIMIT 1').get() as any).id;
+    await setTestPin(post, first);
+    const blocked = await post(`/api/employees/${first}/sync`, { deviceId: DEV });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.json.error, 'sync_blocked_imported');
   });
   assert.equal(count('sync_jobs'), 0);
 });
@@ -387,9 +432,8 @@ test('cadastro: cpf, PIS (deviceEmployeeNo) e matrícula ficam independentes; ze
   const bind = db.prepare('SELECT * FROM employee_device_bindings').get() as any;
   assert.equal(bind.device_employee_no, '00123456789'); // vínculo recebe o PIS, não o CPF
   assert.notEqual(bind.device_employee_no, emp.cpf);
-  const job = JSON.parse((db.prepare('SELECT payload_json FROM sync_jobs').get() as any).payload_json);
-  assert.equal(job.binding.deviceEmployeeNo, '00123456789');
-  assert.equal(typeof job.binding.deviceEmployeeNo, 'string');
+  assert.equal(count('sync_jobs'), 0);
+  assert.equal(bind.sync_status, 'READY');
 });
 
 test('cadastro: REP Topdata exige PIS/PASEP (não usa CPF nem matrícula no lugar) e nada é gravado', async () => {
@@ -480,8 +524,8 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
     });
     assert.equal(create.status, 201);
     const created = await create.json() as any;
-    assert.equal(count('sync_jobs'), 1);
-    assert.equal((db.prepare('SELECT status FROM sync_jobs').get() as any).status, 'PENDING');
+    assert.equal(count('sync_jobs'), 0);
+    assert.equal((db.prepare('SELECT sync_status AS s FROM employee_device_bindings').get() as any).s, 'READY');
 
     const deactivate = await fetch(base + `/api/employees/${created.id}/active`, {
       method: 'PUT',
@@ -506,7 +550,7 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
     });
     assert.equal(syncInactive.status, 409);
     assert.equal((await syncInactive.json() as any).error, 'employee_inactive');
-    assert.equal(count('sync_jobs'), 1);
+    assert.equal(count('sync_jobs'), 0);
 
     const reactivate = await fetch(base + `/api/employees/${created.id}/active`, {
       method: 'PUT',
@@ -515,7 +559,7 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
     });
     assert.equal(reactivate.status, 200);
     assert.equal((db.prepare('SELECT active FROM employees WHERE id=?').get(created.id) as any).active, 1);
-    assert.equal(count('sync_jobs'), 1); // reativar não sincroniza automaticamente
+    assert.equal(count('sync_jobs'), 0); // reativar não sincroniza automaticamente
 
     assert.deepEqual(snapshot(), before);
     assert.equal(eventsFingerprint(db), fp);

@@ -305,10 +305,30 @@ router.post('/api/employees/:id/sync', (req, res) => {
       });
     }
 
-    if (!employee.pin_ciphertext || !employee.pin_iv || !employee.pin_tag) {
+    const device = db.prepare('SELECT id, vendor, active FROM devices WHERE id=?').get(deviceId) as
+      | { id: string; vendor: string; active: number }
+      | undefined;
+
+    if (!device || !device.active) {
+      return res.status(404).json({
+        error: 'device_not_found',
+        message: 'REP não encontrado ou desativado.'
+      });
+    }
+
+    const isTopdata = String(device.vendor ?? '').toUpperCase() === 'TOPDATA';
+
+    if (isTopdata && (!employee.pin_ciphertext || !employee.pin_iv || !employee.pin_tag)) {
       return res.status(409).json({
         error: 'pin_required',
-        message: 'Defina o PIN de 4 dígitos antes de enviar este servidor ao REP.'
+        message: 'Defina o PIN de 4 dígitos antes de enviar este servidor ao REP Topdata.'
+      });
+    }
+
+    if (isTopdata && !process.env.AGENT_TOKEN?.trim()) {
+      return res.status(503).json({
+        error: 'agent_token_required_for_topdata_portal_write',
+        message: 'O servidor não está configurado para autorizar escrita segura no REP Topdata.'
       });
     }
 
@@ -324,6 +344,21 @@ router.post('/api/employees/:id/sync', (req, res) => {
       return res.status(409).json({
         error: 'sync_blocked_imported',
         message: 'Cadastro importado: a sincronização com o REP está bloqueada para este vínculo.'
+      });
+    }
+
+    const activeJob = db.prepare(`
+      SELECT id
+      FROM sync_jobs
+      WHERE employee_id=? AND device_id=? AND status IN ('PENDING','LEASED')
+      ORDER BY id DESC LIMIT 1
+    `).get(employeeId, deviceId) as { id: number } | undefined;
+
+    if (activeJob) {
+      return res.status(409).json({
+        error: 'sync_already_pending',
+        message: 'Já existe um envio em andamento para este servidor e este REP.',
+        jobId: activeJob.id
       });
     }
 

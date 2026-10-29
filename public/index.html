@@ -399,7 +399,7 @@ const roleBadge=(r)=>r==='PRIMARY'
   ?'<span class="badge primary">Principal</span>'
   :'<span class="badge secondary">Secundário</span>';
 const syncBadge=(s)=>{
-  const m={PENDING:['pending','Pendente'],DONE:['done','Sincronizado'],ERROR:['error','Erro'],LEASED:['leased','Em andamento'],IMPORTED:['imported','Importado']};
+  const m={READY:['done','Pronto para envio'],PENDING:['pending','Pendente'],DONE:['done','Sincronizado'],ERROR:['error','Erro'],LEASED:['leased','Em andamento'],IMPORTED:['imported','Importado']};
   const [k,t]=m[s]||['unknown',s||'—'];
   return `<span class="badge ${k}">${esc(t)}</span>`;
 };

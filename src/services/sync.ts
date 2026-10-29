@@ -89,8 +89,17 @@ export function queueEmployeeSync(
       const isTopdata = String(binding.vendor ?? '').toUpperCase() === 'TOPDATA';
 
       // Topdata só recebe escrita quando houve ação explícita no portal.
-      // Cadastro/vínculo automático continua sem gerar job de escrita para o REP.
-      if (isTopdata && !portalApproved) continue;
+      // Sem autorização, o vínculo fica READY (ou preserva IMPORTED), nunca PENDING sem job.
+      if (isTopdata && !portalApproved) {
+        if (binding.sync_status !== IMPORTED_STATUS) {
+          db.prepare(`
+            UPDATE employee_device_bindings
+            SET sync_status='READY', sync_error=NULL, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+          `).run(binding.id);
+        }
+        continue;
+      }
 
       const importedOverride = allowImported && binding.sync_status === IMPORTED_STATUS;
       const pis = normalizePis(binding.device_employee_no);
