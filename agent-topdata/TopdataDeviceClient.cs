@@ -8,11 +8,13 @@ namespace PontoCamara.TopdataAgent
     {
         private readonly string _host;
         private readonly int _port;
+        private readonly TopdataEmployeeWriter _employeeWriter;
 
-        public TopdataDeviceClient(string host, int port)
+        public TopdataDeviceClient(string host, int port, TopdataEmployeeWriter employeeWriter)
         {
             _host = host;
             _port = port;
+            _employeeWriter = employeeWriter;
         }
 
         public bool IsReachable()
@@ -46,13 +48,10 @@ namespace PontoCamara.TopdataAgent
 
         public JobResult Execute(SyncJob job)
         {
-            // Segurança: enquanto a DLL oficial SDK_Inner_Rep não estiver integrada,
-            // nenhuma tarefa de escrita no REP pode ser marcada como sucesso.
-            return new JobResult
-            {
-                ok = false,
-                error = "SDK_TOPDATA_NOT_CONNECTED"
-            };
+            if (_employeeWriter == null)
+                return new JobResult { ok = false, error = "SDK_TOPDATA_NOT_CONNECTED" };
+
+            return _employeeWriter.Execute(job);
         }
     }
 }
