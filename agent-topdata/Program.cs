@@ -185,7 +185,8 @@ namespace PontoCamara.TopdataAgent
                 communicationKey,
                 sdkPath,
                 employeeWriteEnabled,
-                employeeWriteAllowPis);
+                employeeWriteAllowPis,
+                settings.AgentToken);
 
             TopdataDeviceClient device = new TopdataDeviceClient(
                 settings.DeviceHost,
@@ -210,8 +211,8 @@ namespace PontoCamara.TopdataAgent
             Console.WriteLine("Servidor: {0}", settings.ServerUrl);
             Console.WriteLine(
                 employeeWriter.IsConfigured
-                    ? "Escrita de empregados: habilitada com allowlist e verificacao por leitura."
-                    : "Modo seguro: escrita de empregados desabilitada ou sem allowlist/configuracao.");
+                    ? "Escrita de empregados: habilitada com autorizacao assinada por job/allowlist e verificacao por leitura."
+                    : "Modo seguro: escrita de empregados desabilitada ou sem autorizacao/configuracao.");
 
             while (true)
             {

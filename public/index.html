@@ -470,11 +470,18 @@ async function load(){
     const bs=e.bindings||[];
     const isActive=!!e.active;
     const syncButton=!isActive
-      ? `<button type="button" class="btn ghost sm" disabled title="Servidor desativado">${ico('sync')}Sincronizar</button>`
+      ? `<button type="button" class="btn ghost sm" disabled title="Servidor desativado">${ico('sync')}Enviar ao REP</button>`
       : bs.length
-        ? (bs.every(b=>b.sync_status==='IMPORTED')
-          ? bs.map(b=>`<button type="button" class="btn ghost sm" onclick="syncImportedEmployee(${Number(e.id)},'${esc(b.device_id)}',this)" title="Liberação explícita somente para este REP">${ico('sync')}Enviar ao REP</button>`).join('')
-          : `<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`)
+        ? bs.map(b=>{
+            const busy=b.sync_status==='PENDING'||b.sync_status==='LEASED';
+            const missingPin=!e.pinConfigured;
+            const disabled=busy||missingPin?' disabled':'';
+            const label=busy?'Enviando...':'Enviar ao REP';
+            const title=missingPin
+              ? 'Defina o PIN antes do envio'
+              : 'Autorização única para este servidor e este REP';
+            return `<button type="button" class="btn ghost sm"${disabled} onclick="sendEmployeeToRep(${Number(e.id)},'${esc(b.device_id)}',${b.sync_status==='IMPORTED'?'true':'false'},this)" title="${title}">${ico('sync')}${label}</button>`;
+          }).join('')
         : '';
     const activeButton=isActive
       ? `<button type="button" class="btn danger sm" onclick="setEmployeeActive(${Number(e.id)},false,this)">Desativar</button>`
@@ -521,43 +528,76 @@ async function setEmployeeActive(id,active,btn){
   }
 }
 
-async function syncImportedEmployee(id,deviceId,btn){
+async function waitForSyncJob(jobId,timeoutMs=120000){
+  const deadline=Date.now()+timeoutMs;
+  while(Date.now()<deadline){
+    await new Promise(resolve=>setTimeout(resolve,2000));
+    const r=await fetch('/api/sync/jobs');
+    if(!r.ok) throw new Error('Falha ao consultar o envio.');
+    const jobs=await r.json();
+    const job=jobs.find(j=>Number(j.id)===Number(jobId));
+    if(!job) throw new Error('Job de envio não encontrado.');
+    if(job.status==='DONE'||job.status==='ERROR') return job;
+  }
+  throw new Error('Tempo limite aguardando confirmação do REP.');
+}
+
+async function sendEmployeeToRep(id,deviceId,allowImported,btn){
   const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
   const binding=(employee?.bindings||[]).find(b=>String(b.device_id)===String(deviceId));
   if(!employee||!binding) return;
 
+  if(!employee.pinConfigured){
+    toast('Defina o PIN de 4 dígitos antes do envio ao REP.');
+    return;
+  }
+
   const ok=confirm(
-    `Enviar ${employee.name} especificamente para ${binding.device_name}?\n\n`+
-    'Este vínculo foi importado e normalmente fica protegido contra escrita. '+
-    'Esta liberação vale somente para este servidor e este REP; os demais importados continuam bloqueados.'
+    `Enviar ${employee.name} para ${binding.device_name}?\n\n`+
+    'A autorização vale somente para este servidor e este REP. '+
+    'O agente fará backup, gravação e releitura de confirmação.'
   );
   if(!ok) return;
 
+  const original=btn.innerHTML;
   btn.disabled=true;
+  btn.innerHTML=ico('sync')+'Autorizando...';
+
   try{
     const r=await fetch(`/api/employees/${id}/sync`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({deviceId,allowImported:true})
+      body:JSON.stringify({deviceId,allowImported:!!allowImported})
     });
     const b=await r.json().catch(()=>({}));
-    toast(r.ok?'Envio ao REP enfileirado.':(b.message||b.error||'Falha ao liberar envio ao REP.'));
-    await load();
-  }catch(err){
-    toast('Falha ao liberar envio ao REP.');
-    btn.disabled=false;
-  }
-}
+    if(!r.ok){
+      toast(b.message||b.error||'Falha ao autorizar envio ao REP.');
+      return;
+    }
 
-// Reaproveita o endpoint existente POST /api/employees/:id/sync
-async function syncEmployee(id,btn){
-  btn.disabled=true;
-  try{
-    const r=await fetch(`/api/employees/${id}/sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const b=await r.json().catch(()=>({}));
-    toast(r.ok?'Sincronização enfileirada.':(b.message||b.error||'Falha ao enfileirar sincronização.'));
+    const jobs=Array.isArray(b.jobs)?b.jobs:[];
+    if(jobs.length!==1){
+      toast('O portal não recebeu um job único de envio.');
+      return;
+    }
+
+    btn.innerHTML=ico('sync')+'Enviando...';
+    toast('Envio autorizado. Aguardando confirmação do REP...');
+
+    const job=await waitForSyncJob(jobs[0]);
+
+    if(job.status==='DONE'){
+      toast(`${employee.name} enviado e confirmado no REP.`);
+    }else{
+      toast(`Falha no envio: ${job.error_message||'erro não detalhado'}`);
+    }
+  }catch(err){
+    toast(err?.message||'Falha ao acompanhar o envio ao REP.');
+  }finally{
+    btn.innerHTML=original;
+    btn.disabled=false;
     await load();
-  }catch(err){ toast('Falha ao enfileirar sincronização.'); btn.disabled=false; }
+  }
 }
 
 const onlyDigits=(v)=>String(v??'').replace(/\D/g,'');
@@ -618,7 +658,7 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
     status.textContent=body.error||'Falha ao cadastrar.';
     return;
   }
-  status.textContent='Servidor cadastrado. '+(body.syncJobs?.length?body.syncJobs.length+' sincronização(ões) enfileirada(s).':'Sem REP selecionado.');
+  status.textContent='Servidor cadastrado. '+(deviceIds.length?'Use “Enviar ao REP” para autorizar a gravação.':'Sem REP selecionado.');
   ev.target.reset();
   setHint('empCpf','empCpfHint','');setHint('empPis','empPisHint','');setHint('empPin','empPinHint','');
   await load();

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,7 +26,7 @@ namespace PontoCamara.TopdataAgent
         private readonly string _communicationKey;
         private readonly string _sdkPath;
         private readonly bool _writeEnabled;
-        private readonly bool _allowAll;
+        private readonly string _agentToken;
         private readonly HashSet<string> _allowedPis = new HashSet<string>(StringComparer.Ordinal);
         private Assembly _assembly;
         private Type _sdkType;
@@ -35,17 +36,22 @@ namespace PontoCamara.TopdataAgent
             string communicationKey,
             string sdkPath,
             bool writeEnabled,
-            string allowedPis)
+            string allowedPis,
+            string agentToken)
         {
             _host = host;
             _communicationKey = communicationKey;
             _sdkPath = sdkPath;
             _writeEnabled = writeEnabled;
+            _agentToken = agentToken ?? "";
 
             string raw = (allowedPis ?? "").Trim();
-            _allowAll = raw == "*";
 
-            if (!_allowAll && raw.Length > 0)
+            // "*" nunca é aceito. A liberação normal vem assinada por job do portal.
+            if (raw == "*")
+                raw = "";
+
+            if (raw.Length > 0)
             {
                 string[] parts = raw.Split(new char[] { ',', ';', ' ', '\t', '\r', '\n' },
                     StringSplitOptions.RemoveEmptyEntries);
@@ -73,7 +79,7 @@ namespace PontoCamara.TopdataAgent
                     && !String.IsNullOrEmpty(_communicationKey)
                     && !String.IsNullOrEmpty(_sdkPath)
                     && File.Exists(_sdkPath)
-                    && (_allowAll || _allowedPis.Count > 0);
+                    && (!String.IsNullOrEmpty(_agentToken) || _allowedPis.Count > 0);
             }
         }
 
@@ -98,7 +104,10 @@ namespace PontoCamara.TopdataAgent
             if (targetPis == null)
                 return Fail("TOPDATA_INVALID_PIS");
 
-            if (!_allowAll && !_allowedPis.Contains(targetPis))
+            bool staticAllowed = _allowedPis.Contains(targetPis);
+            bool portalAllowed = ValidatePortalGrant(job, targetPis);
+
+            if (!staticAllowed && !portalAllowed)
                 return Fail("TOPDATA_WRITE_NOT_ALLOWED_FOR_EMPLOYEE");
 
             string targetPin = (job.payload.employee.pin ?? "").Trim();
@@ -142,6 +151,86 @@ namespace PontoCamara.TopdataAgent
             {
                 return Fail("TOPDATA_WRITE_FAILED:" + SafeError(ex));
             }
+        }
+
+        private bool ValidatePortalGrant(SyncJob job, string targetPis)
+        {
+            if (String.IsNullOrEmpty(_agentToken)
+                || job == null
+                || job.payload == null
+                || job.payload.employee == null
+                || job.payload.binding == null
+                || job.payload.syncMeta == null)
+                return false;
+
+            SyncMeta meta = job.payload.syncMeta;
+
+            if (!meta.portalApproved)
+                return false;
+
+            if (NormalizePis(meta.approvedPis) != targetPis)
+                return false;
+
+            if (String.IsNullOrEmpty(meta.approvedDeviceId)
+                || meta.approvedDeviceId != job.device_id
+                || meta.approvedDeviceId != job.payload.binding.deviceId)
+                return false;
+
+            if (String.IsNullOrEmpty(meta.issuedAt)
+                || String.IsNullOrEmpty(meta.nonce)
+                || String.IsNullOrEmpty(meta.signature))
+                return false;
+
+            DateTime issuedAt;
+            if (!DateTime.TryParse(
+                meta.issuedAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out issuedAt))
+                return false;
+
+            DateTime now = DateTime.UtcNow;
+            DateTime issuedUtc = issuedAt.ToUniversalTime();
+
+            if (issuedUtc > now.AddMinutes(5) || issuedUtc < now.AddHours(-2))
+                return false;
+
+            string material =
+                "UPSERT_EMPLOYEE"
+                + "|" + job.payload.employee.id.ToString(CultureInfo.InvariantCulture)
+                + "|" + meta.approvedDeviceId
+                + "|" + targetPis
+                + "|" + meta.issuedAt
+                + "|" + meta.nonce;
+
+            string expected = HmacHex(_agentToken, material);
+            return FixedTimeEquals(expected, meta.signature);
+        }
+
+        private static string HmacHex(string secret, string material)
+        {
+            using (HMACSHA256 hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret)))
+            {
+                byte[] hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(material));
+                StringBuilder sb = new StringBuilder(hash.Length * 2);
+                int i;
+                for (i = 0; i < hash.Length; i++)
+                    sb.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+                return sb.ToString();
+            }
+        }
+
+        private static bool FixedTimeEquals(string expected, string supplied)
+        {
+            if (expected == null || supplied == null || expected.Length != supplied.Length)
+                return false;
+
+            int diff = 0;
+            int i;
+            for (i = 0; i < expected.Length; i++)
+                diff |= expected[i] ^ supplied[i];
+
+            return diff == 0;
         }
 
         private void EnsureSdkLoaded()

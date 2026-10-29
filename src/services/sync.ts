@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'node:crypto';
 import { db } from '../storage/db.js';
 import { decryptPin } from '../security/pin.js';
 
@@ -21,12 +22,43 @@ export function countSyncTargets(employeeId: number, deviceId?: string, allowImp
   return { eligible, blocked };
 }
 
-export function queueEmployeeSync(employeeId: number, deviceId?: string, allowImported = false) {
+function normalizePis(value: unknown) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (/^0\d{11}$/.test(digits)) return digits.slice(1);
+  return /^\d{11}$/.test(digits) ? digits : null;
+}
+
+function createPortalGrant(employeeId: number, deviceId: string, pis: string) {
+  const secret = process.env.AGENT_TOKEN ?? '';
+  if (!secret) throw new Error('agent_token_required_for_topdata_portal_write');
+
+  const issuedAt = new Date().toISOString();
+  const nonce = randomBytes(16).toString('hex');
+  const material = ['UPSERT_EMPLOYEE', employeeId, deviceId, pis, issuedAt, nonce].join('|');
+  const signature = createHmac('sha256', secret).update(material, 'utf8').digest('hex');
+
+  return {
+    portalApproved: true,
+    approvedPis: pis,
+    approvedDeviceId: deviceId,
+    issuedAt,
+    nonce,
+    signature
+  };
+}
+
+export function queueEmployeeSync(
+  employeeId: number,
+  deviceId?: string,
+  allowImported = false,
+  portalApproved = false
+) {
   const employee = db.prepare('SELECT * FROM employees WHERE id=?').get(employeeId) as any;
   if (!employee) throw new Error('employee_not_found');
   if (!employee.active) throw new Error('employee_inactive');
 
   if (allowImported && !deviceId) throw new Error('allow_imported_requires_device');
+  if (portalApproved && !deviceId) throw new Error('portal_write_requires_device');
 
   const candidates = deviceId
     ? db.prepare(`
@@ -54,7 +86,24 @@ export function queueEmployeeSync(employeeId: number, deviceId?: string, allowIm
   const tx = db.transaction(() => {
     const ids: number[] = [];
     for (const binding of bindings) {
+      const isTopdata = String(binding.vendor ?? '').toUpperCase() === 'TOPDATA';
+
+      // Topdata só recebe escrita quando houve ação explícita no portal.
+      // Cadastro/vínculo automático continua sem gerar job de escrita para o REP.
+      if (isTopdata && !portalApproved) continue;
+
       const importedOverride = allowImported && binding.sync_status === IMPORTED_STATUS;
+      const pis = normalizePis(binding.device_employee_no);
+      if (isTopdata && !pis) throw new Error('topdata_invalid_pis');
+
+      const syncMeta: Record<string, unknown> = {
+        importedOverride
+      };
+
+      if (isTopdata && portalApproved) {
+        Object.assign(syncMeta, createPortalGrant(employee.id, binding.device_id, pis!));
+      }
+
       const payload = {
         employee: {
           id: employee.id,
@@ -69,9 +118,7 @@ export function queueEmployeeSync(employeeId: number, deviceId?: string, allowIm
           cardNo: binding.card_no,
           enabled: !!binding.enabled
         },
-        syncMeta: {
-          importedOverride
-        }
+        syncMeta
       };
       const result = insert.run(binding.device_id, employee.id, 'UPSERT_EMPLOYEE', JSON.stringify(payload));
       ids.push(Number(result.lastInsertRowid));

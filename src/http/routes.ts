@@ -276,7 +276,17 @@ router.post('/api/employees/:id/bindings', (req, res) => {
 router.post('/api/employees/:id/sync', (req, res) => {
   try {
     const employeeId = Number(req.params.id);
-    const employee = db.prepare('SELECT active FROM employees WHERE id=?').get(employeeId) as { active: number } | undefined;
+    const employee = db.prepare(`
+      SELECT active, pin_ciphertext, pin_iv, pin_tag
+      FROM employees
+      WHERE id=?
+    `).get(employeeId) as {
+      active: number;
+      pin_ciphertext: string | null;
+      pin_iv: string | null;
+      pin_tag: string | null;
+    } | undefined;
+
     if (!employee) return res.status(404).json({ error: 'employee_not_found' });
     if (!employee.active) {
       return res.status(409).json({
@@ -287,6 +297,20 @@ router.post('/api/employees/:id/sync', (req, res) => {
 
     const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : undefined;
     const allowImported = req.body?.allowImported === true;
+
+    if (!deviceId) {
+      return res.status(400).json({
+        error: 'portal_write_requires_device',
+        message: 'Selecione explicitamente um único REP para o envio.'
+      });
+    }
+
+    if (!employee.pin_ciphertext || !employee.pin_iv || !employee.pin_tag) {
+      return res.status(409).json({
+        error: 'pin_required',
+        message: 'Defina o PIN de 4 dígitos antes de enviar este servidor ao REP.'
+      });
+    }
 
     if (allowImported && !deviceId) {
       return res.status(400).json({
@@ -303,7 +327,20 @@ router.post('/api/employees/:id/sync', (req, res) => {
       });
     }
 
-    const jobs = queueEmployeeSync(employeeId, deviceId, allowImported);
+    const jobs = queueEmployeeSync(employeeId, deviceId, allowImported, true);
+
+    if (jobs.length !== 1) {
+      return res.status(409).json({
+        error: 'portal_write_job_not_created',
+        message: 'Não foi possível criar uma autorização única de envio para este REP.'
+      });
+    }
+
+    audit('EMPLOYEE_SYNC_PORTAL_APPROVED', 'employee', employeeId, {
+      deviceId,
+      jobs,
+      importedOverride: allowImported
+    });
 
     if (allowImported && targets.blocked > 0 && jobs.length > 0) {
       audit('EMPLOYEE_SYNC_IMPORTED_OVERRIDE', 'employee', employeeId, {

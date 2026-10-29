@@ -15,7 +15,7 @@ O agente já:
 - confirma a escrita por nova leitura integral do REP;
 - salva backup local criptografado por DPAPI antes da alteração.
 
-A escrita continua **bloqueada por padrão** e exige habilitação + allowlist de PIS/PASEP.
+A escrita continua **bloqueada por padrão**. Em produção, o portal gera uma autorização assinada e de uso específico para um servidor/REP; a allowlist local fica apenas como mecanismo de homologação/emergência.
 
 ## Requisito do SDK oficial
 
@@ -54,9 +54,10 @@ Na primeira execução o agente importa o NSR inicial e, nas seguintes, consulta
 
 Variáveis adicionais:
 
-- `TOPDATA_ENABLE_EMPLOYEE_WRITE=1`: habilita o caminho de escrita;
-- `TOPDATA_WRITE_ALLOW_PIS=20079252537`: allowlist de PIS/PASEP separados por vírgula; use `*` somente depois da homologação.
+- `TOPDATA_ENABLE_EMPLOYEE_WRITE=1`: habilita o caminho de escrita no agente;
+- `TOPDATA_WRITE_ALLOW_PIS=`: normalmente fica vazio em produção; uma lista explícita de PIS/PASEP pode ser usada somente para homologação/emergência;
+- `PONTO_AGENT_TOKEN`: deve ser o mesmo `AGENT_TOKEN` do servidor e é usado também para validar a autorização assinada do portal.
 
-Sem as duas condições, o agente recusa a tarefa. Antes da gravação ele lê todos os empregados, bloqueia lista vazia/incompleta, detecta PIS/cartão duplicado e cria backup protegido em `%ProgramData%\PontoCamara\backups`.
+O valor `*` não é aceito pelo writer. No fluxo normal, cada clique em **Enviar ao REP** cria um job para um único servidor e um único REP, com autorização HMAC assinada pelo servidor e validade limitada. O agente confere PIS, REP, assinatura e horário antes de qualquer escrita.
 
-Para o primeiro teste, mantenha a allowlist restrita a um único servidor.
+Antes da gravação ele lê todos os empregados, bloqueia lista vazia/incompleta, detecta PIS/cartão duplicado, cria backup protegido em `%ProgramData%\PontoCamara\backups` e confirma o resultado por nova leitura integral do REP.

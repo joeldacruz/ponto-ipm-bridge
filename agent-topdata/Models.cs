@@ -38,6 +38,18 @@ namespace PontoCamara.TopdataAgent
     {
         public SyncEmployee employee;
         public SyncBinding binding;
+        public SyncMeta syncMeta;
+    }
+
+    public sealed class SyncMeta
+    {
+        public bool importedOverride;
+        public bool portalApproved;
+        public string approvedPis;
+        public string approvedDeviceId;
+        public string issuedAt;
+        public string nonce;
+        public string signature;
     }
 
     public sealed class SyncEmployee
