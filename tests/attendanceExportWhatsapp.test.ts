@@ -12,7 +12,9 @@ delete process.env.WHATSAPP_GATEWAY_API_KEY;
 let db: typeof import('../src/storage/db.js')['db'];
 let saveEvents: typeof import('../src/services/events.js')['saveEvents'];
 let buildAttendanceAfdDownload: typeof import('../src/services/exporter.js')['buildAttendanceAfdDownload'];
+let buildAttendanceAfdDailyDownload: typeof import('../src/services/exporter.js')['buildAttendanceAfdDailyDownload'];
 let buildGenericCsvDownload: typeof import('../src/services/exporter.js')['buildGenericCsvDownload'];
+let buildGenericCsvDailyDownload: typeof import('../src/services/exporter.js')['buildGenericCsvDailyDownload'];
 let normalizeWhatsappNumber: typeof import('../src/services/whatsapp.js')['normalizeWhatsappNumber'];
 
 const DEV = 'rep-topdata-test';
@@ -23,7 +25,12 @@ const RAW = '0000001233291020260828' + REP_EMPLOYEE;
 test.before(async () => {
   ({ db } = await import('../src/storage/db.js'));
   ({ saveEvents } = await import('../src/services/events.js'));
-  ({ buildAttendanceAfdDownload, buildGenericCsvDownload } = await import('../src/services/exporter.js'));
+  ({
+    buildAttendanceAfdDownload,
+    buildAttendanceAfdDailyDownload,
+    buildGenericCsvDownload,
+    buildGenericCsvDailyDownload
+  } = await import('../src/services/exporter.js'));
   ({ normalizeWhatsappNumber } = await import('../src/services/whatsapp.js'));
 
   db.prepare(`
@@ -173,4 +180,76 @@ test('CSV de conferência associa o servidor pelo PIS de 11 dígitos', () => {
   assert.match(out.content, /ANA TESTE/);
   assert.match(out.content, /1001-00/);
   assert.match(out.content, /000123456789/);
+});
+
+
+test('AFD diário filtra somente as marcações do dia selecionado', () => {
+  wipe();
+  createEmployee(false);
+
+  saveEvents([
+    {
+      sourceId: DEV + ':126',
+      deviceId: DEV,
+      employeeNo: REP_EMPLOYEE,
+      occurredAt: '2026-10-29T11:00:00',
+      kind: 'ATTENDANCE',
+      nsr: 126,
+      rawType: '3',
+      rawPayload: '0000001263291020261100' + REP_EMPLOYEE
+    },
+    {
+      sourceId: DEV + ':127',
+      deviceId: DEV,
+      employeeNo: REP_EMPLOYEE,
+      occurredAt: '2026-10-30T08:00:00',
+      kind: 'ATTENDANCE',
+      nsr: 127,
+      rawType: '3',
+      rawPayload: '0000001273301020260800' + REP_EMPLOYEE
+    }
+  ]);
+
+  const out = buildAttendanceAfdDailyDownload('2026-10-29', DEV);
+
+  assert.equal(out.count, 1);
+  assert.equal(out.skipped, 0);
+  assert.match(out.content, /^0000001263/);
+  assert.doesNotMatch(out.content, /0000001273/);
+  assert.equal(out.fileName, 'AFD-rep-topdata-test-2026-10-29.txt');
+});
+
+test('CSV diário filtra somente as marcações do dia selecionado', () => {
+  wipe();
+  createEmployee(false);
+
+  saveEvents([
+    {
+      sourceId: DEV + ':128',
+      deviceId: DEV,
+      employeeNo: REP_EMPLOYEE,
+      occurredAt: '2026-10-29T12:00:00',
+      kind: 'ATTENDANCE',
+      nsr: 128,
+      rawType: '3',
+      rawPayload: '0000001283291020261200' + REP_EMPLOYEE
+    },
+    {
+      sourceId: DEV + ':129',
+      deviceId: DEV,
+      employeeNo: REP_EMPLOYEE,
+      occurredAt: '2026-10-30T12:00:00',
+      kind: 'ATTENDANCE',
+      nsr: 129,
+      rawType: '3',
+      rawPayload: '0000001293301020261200' + REP_EMPLOYEE
+    }
+  ]);
+
+  const out = buildGenericCsvDailyDownload('2026-10-29', DEV);
+
+  assert.equal(out.count, 1);
+  assert.match(out.content, /2026-10-29T12:00:00/);
+  assert.doesNotMatch(out.content, /2026-10-30T12:00:00/);
+  assert.equal(out.fileName, 'ponto-rep-topdata-test-2026-10-29.csv');
 });
