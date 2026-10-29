@@ -139,6 +139,47 @@ CREATE TABLE IF NOT EXISTS attendance_notifications (
 
 CREATE INDEX IF NOT EXISTS idx_attendance_notifications_status
   ON attendance_notifications(status, next_attempt_at);
+
+
+CREATE TABLE IF NOT EXISTS app_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  password_hash TEXT,
+  whatsapp_number TEXT,
+  role TEXT NOT NULL DEFAULT 'OPERATOR'
+    CHECK(role IN ('ADMIN','OPERATOR')),
+  active INTEGER NOT NULL DEFAULT 1,
+  password_updated_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES app_users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_sessions_expiry
+  ON app_sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  channel TEXT NOT NULL CHECK(channel IN ('EMAIL','WHATSAPP')),
+  code_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES app_users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_user
+  ON password_reset_codes(user_id, expires_at);
 `);
 
 function ensureColumn(table: string, column: string, definition: string) {
@@ -156,6 +197,38 @@ ensureColumn('employees', 'pin_tag', 'TEXT');
 ensureColumn('employees', 'pin_updated_at', 'TEXT');
 ensureColumn('employees', 'whatsapp_number', 'TEXT');
 ensureColumn('employees', 'whatsapp_attendance_enabled', 'INTEGER NOT NULL DEFAULT 0');
+
+
+db.prepare(`
+  INSERT OR IGNORE INTO app_users(name,email,role)
+  VALUES(?,?,?)
+`).run('Joel da Cruz', 'joeldacruz@gmail.com', 'ADMIN');
+
+db.prepare(`
+  INSERT OR IGNORE INTO app_users(name,email,role)
+  VALUES(?,?,?)
+`).run('Josiele Tischler', 'josy_con_tabil@hotmail.com', 'OPERATOR');
+
+db.prepare(`
+  UPDATE app_users
+  SET whatsapp_number=(
+    SELECT e.whatsapp_number
+    FROM employees e
+    WHERE lower(e.name)=lower(app_users.name)
+      AND e.whatsapp_number IS NOT NULL
+      AND trim(e.whatsapp_number)<>''
+    LIMIT 1
+  )
+  WHERE whatsapp_number IS NULL
+    AND EXISTS(
+      SELECT 1
+      FROM employees e
+      WHERE lower(e.name)=lower(app_users.name)
+        AND e.whatsapp_number IS NOT NULL
+        AND trim(e.whatsapp_number)<>''
+    )
+`).run();
+
 
 const topdataHost = process.env.TOPDATA_HOST;
 if (topdataHost) {
