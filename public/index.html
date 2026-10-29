@@ -62,6 +62,8 @@
     .btn:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid rgba(29,90,66,.28);outline-offset:1px}
     .btn.ghost{background:var(--surface);color:var(--brand);border-color:#cfd9d4}
     .btn.ghost:hover{background:var(--brand-soft)}
+    .btn.danger{background:var(--surface);color:var(--bad);border-color:#e5c4c1}
+    .btn.danger:hover{background:var(--bad-soft)}
     .btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
     .btn[disabled]{opacity:.6;cursor:wait}.btn.ghost[disabled]{cursor:not-allowed}
     .btn.busy svg{animation:spin 1s linear infinite}
@@ -114,6 +116,9 @@
     .badge.error{background:var(--bad-soft);color:var(--bad);border-color:#f0cfcc}
     .badge.imported{background:var(--info-soft);color:var(--info);border-color:#cbdcf0}
     .badge.leased{background:var(--info-soft);color:var(--info);border-color:#cbdcf0}
+    .badge.inactive{background:var(--line-2);color:var(--muted);border-color:var(--line)}
+    tr.employee-inactive{background:#fafbfa}
+    tr.employee-inactive .t-name{color:var(--muted)}
     .chip{display:inline-block;padding:2px 9px;border-radius:7px;background:var(--line-2);font-size:12.5px;color:var(--ink-2);border:1px solid var(--line)}
     .chips{display:flex;flex-wrap:wrap;gap:6px}
 
@@ -277,7 +282,7 @@
     <div class="kpi info"><span class="ic"><svg><use href="#i-device"/></svg></span>
       <div><div class="lb">REPs cadastrados</div><div class="vl" id="devicesCount">—</div></div></div>
     <div class="kpi"><span class="ic"><svg><use href="#i-users"/></svg></span>
-      <div><div class="lb">Servidores cadastrados</div><div class="vl" id="employeesCount">—</div></div></div>
+      <div><div class="lb">Servidores ativos</div><div class="vl" id="employeesCount">—</div></div></div>
     <div class="kpi gold"><span class="ic"><svg><use href="#i-fingerprint"/></svg></span>
       <div><div class="lb">Marcações coletadas</div><div class="vl" id="eventsCount">—</div></div></div>
     <div class="kpi warn" id="pendingKpi"><span class="ic"><svg><use href="#i-sync"/></svg></span>
@@ -330,8 +335,8 @@
     </div>
     <div class="tw">
       <table class="cards">
-        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>REPs vinculados</th><th>PIN</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
-        <tbody id="employees"><tr><td colspan="7" class="empty">Carregando...</td></tr></tbody>
+        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>Status</th><th>REPs vinculados</th><th>PIN</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
+        <tbody id="employees"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -424,7 +429,8 @@ async function load(){
   eventsCount.textContent=num(health.attendance?.total??0);
 
   window._employees=employees;
-  const allBindings=employees.flatMap(e=>e.bindings||[]);
+  const activeEmployees=employees.filter(e=>!!e.active);
+  const allBindings=activeEmployees.flatMap(e=>e.bindings||[]);
   const pending=allBindings.filter(b=>b.sync_status==='PENDING'||b.sync_status==='LEASED').length;
   const errors=allBindings.filter(b=>b.sync_status==='ERROR').length;
   pendingCount.textContent=pending;
@@ -438,7 +444,10 @@ async function load(){
   document.getElementById('alerts').innerHTML=alerts.join('');
 
   document.getElementById('devicesTotal').textContent=devices.length?`${devices.length} ${devices.length===1?'equipamento':'equipamentos'}`:'';
-  document.getElementById('employeesTotal').textContent=employees.length?`${employees.length} ${employees.length===1?'servidor':'servidores'}`:'';
+  const inactiveCount=employees.filter(e=>!e.active).length;
+  document.getElementById('employeesTotal').textContent=employees.length
+    ? `${employees.length} ${employees.length===1?'servidor':'servidores'}${inactiveCount?' · '+inactiveCount+' desativado'+(inactiveCount===1?'':'s'):''}`
+    : '';
 
   document.getElementById('devices').innerHTML=devices.length?devices.map(d=>`
     <tr class="${d.role==='PRIMARY'?'is-primary':'is-secondary'}">
@@ -459,19 +468,57 @@ async function load(){
 
   document.getElementById('employees').innerHTML=employees.length?employees.map(e=>{
     const bs=e.bindings||[];
-    return `<tr>
+    const isActive=!!e.active;
+    const syncButton=!isActive
+      ? `<button type="button" class="btn ghost sm" disabled title="Servidor desativado">${ico('sync')}Sincronizar</button>`
+      : bs.length
+        ? (bs.every(b=>b.sync_status==='IMPORTED')
+          ? `<button type="button" class="btn ghost sm" disabled title="Cadastro importado: sem escrita no REP">${ico('sync')}Sincronizar</button>`
+          : `<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`)
+        : '';
+    const activeButton=isActive
+      ? `<button type="button" class="btn danger sm" onclick="setEmployeeActive(${Number(e.id)},false,this)">Desativar</button>`
+      : `<button type="button" class="btn ghost sm" onclick="setEmployeeActive(${Number(e.id)},true,this)">Reativar</button>`;
+
+    return `<tr class="${isActive?'':'employee-inactive'}">
       <td data-label="Matrícula" class="mono">${esc(e.registration||'—')}</td>
       <td data-label="Nome" class="cell-title"><div class="t-name">${esc(e.name)}</div></td>
       <td data-label="CPF" class="mono">${e.cpf?fmtCpf(e.cpf):'—'}</td>
+      <td data-label="Status">${isActive?'<span class="badge done">Ativo</span>':'<span class="badge inactive">Desativado</span>'}</td>
       <td data-label="REPs vinculados">${bs.length?'<div class="chips">'+bs.map(b=>'<span class="chip">'+esc(b.device_name)+'</span>').join('')+'</div>':'<span class="muted">Nenhum</span>'}</td>
       <td data-label="PIN"><span class="pin-state">${e.pinConfigured?'<span class="badge done">Configurado</span>':'<span class="badge pending">Não definido</span>'}</span></td>
       <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
-      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button>${bs.length?(bs.every(b=>b.sync_status==='IMPORTED')
-        ?`<button type="button" class="btn ghost sm" disabled title="Cadastro importado: sem escrita no REP">${ico('sync')}Sincronizar</button>`
-        :`<button type="button" class="btn ghost sm" onclick="syncEmployee(${Number(e.id)},this)">${ico('sync')}Sincronizar</button>`):''}</div></td>
+      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button>${syncButton}${activeButton}</div></td>
     </tr>`;
-  }).join(''):'<tr><td colspan="7" class="empty">Nenhum servidor cadastrado.</td></tr>';
+  }).join(''):'<tr><td colspan="8" class="empty">Nenhum servidor cadastrado.</td></tr>';
   } finally { btn.disabled=false;btn.classList.remove('busy'); }
+}
+
+async function setEmployeeActive(id,active,btn){
+  const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
+  if(!employee) return;
+
+  const action=active?'reativar':'desativar';
+  const detail=active
+    ? `Reativar ${employee.name} no sistema?`
+    : `Desativar ${employee.name}? O histórico será preservado e nenhuma exclusão será enviada ao REP nesta etapa.`;
+
+  if(!confirm(detail)) return;
+
+  btn.disabled=true;
+  try{
+    const r=await fetch(`/api/employees/${id}/active`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({active})
+    });
+    const b=await r.json().catch(()=>({}));
+    toast(r.ok?(b.message||`Servidor ${action}do.`):(b.message||b.error||`Falha ao ${action} servidor.`));
+    await load();
+  }catch(err){
+    toast(`Falha ao ${action} servidor.`);
+    btn.disabled=false;
+  }
 }
 
 // Reaproveita o endpoint existente POST /api/employees/:id/sync
