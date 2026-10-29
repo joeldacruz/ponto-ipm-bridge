@@ -183,6 +183,14 @@
     .rep-confirm-note svg{font-size:17px;margin-top:1px}
     .rep-confirm-dialog .row{margin-top:20px}
     .rep-confirm-dialog .row .btn{min-width:118px}
+    .rep-confirm-status{display:none;gap:10px;align-items:flex-start;margin-top:14px;padding:12px 14px;border-radius:10px;font-size:13px;line-height:1.45}
+    .rep-confirm-status.show{display:flex}
+    .rep-confirm-status svg{font-size:18px;margin-top:1px;flex:none}
+    .rep-confirm-status.waiting{background:var(--warn-soft);color:#6e4707;border:1px solid #f1deb0}
+    .rep-confirm-status.success{background:var(--ok-soft);color:var(--ok);border:1px solid #cde8d8}
+    .rep-confirm-status.error{background:var(--bad-soft);color:var(--bad);border:1px solid #f0cfcc}
+    .rep-confirm-status.waiting svg{animation:spin 1s linear infinite}
+    @media (prefers-reduced-motion:reduce){.rep-confirm-status.waiting svg{animation:none}}
     @media(max-width:520px){
       .rep-confirm-target{grid-template-columns:1fr;gap:2px}
       .rep-confirm-target strong{margin-bottom:7px}
@@ -390,7 +398,7 @@
       <span class="rep-confirm-icon" aria-hidden="true"><svg><use href="#i-sync"/></svg></span>
       <div>
         <h3 id="repConfirmTitle">Enviar servidor ao REP</h3>
-        <p>Confirme os dados antes de autorizar a gravação no equipamento.</p>
+        <p id="repConfirmSubtitle">Confirme os dados antes de autorizar a gravação no equipamento.</p>
       </div>
     </div>
 
@@ -399,7 +407,7 @@
       <span>Equipamento</span><strong id="repConfirmDevice">—</strong>
     </div>
 
-    <div class="rep-confirm-note">
+    <div class="rep-confirm-note" id="repConfirmNote">
       <svg><use href="#i-shield"/></svg>
       <div>
         Esta autorização vale somente para este servidor e este REP.
@@ -407,9 +415,11 @@
       </div>
     </div>
 
+    <div class="rep-confirm-status" id="repConfirmStatus" role="status" aria-live="polite"></div>
+
     <div class="row">
-      <button type="button" class="btn ghost" onclick="closeRepConfirm(false)">Cancelar</button>
-      <button type="button" class="btn" id="repConfirmSubmit" onclick="closeRepConfirm(true)">
+      <button type="button" class="btn ghost" id="repConfirmCancel" onclick="closeRepConfirm(false)">Cancelar</button>
+      <button type="button" class="btn" id="repConfirmSubmit" onclick="repConfirmPrimaryAction()">
         <svg><use href="#i-sync"/></svg>Enviar ao REP
       </button>
     </div>
@@ -595,11 +605,38 @@ async function waitForSyncJob(jobId,timeoutMs=120000){
 }
 
 let repConfirmResolve=null;
+let repConfirmPhase='idle';
+
+function setRepConfirmStatus(kind,message){
+  const status=document.getElementById('repConfirmStatus');
+  status.className='rep-confirm-status show '+kind;
+  const icon=kind==='success'?'shield':kind==='error'?'alert':'sync';
+  status.innerHTML=ico(icon)+'<div>'+esc(message)+'</div>';
+}
+
+function resetRepConfirm(employee,binding){
+  repConfirmPhase='confirm';
+  document.getElementById('repConfirmEmployee').textContent=employee.name;
+  document.getElementById('repConfirmDevice').textContent=binding.device_name||binding.device_id||'REP';
+  document.getElementById('repConfirmTitle').textContent='Enviar servidor ao REP';
+  document.getElementById('repConfirmSubtitle').textContent='Confirme os dados antes de autorizar a gravação no equipamento.';
+  document.getElementById('repConfirmNote').hidden=false;
+
+  const status=document.getElementById('repConfirmStatus');
+  status.className='rep-confirm-status';
+  status.innerHTML='';
+
+  const cancel=document.getElementById('repConfirmCancel');
+  const submit=document.getElementById('repConfirmSubmit');
+  cancel.hidden=false;
+  cancel.disabled=false;
+  submit.disabled=false;
+  submit.innerHTML=ico('sync')+'Enviar ao REP';
+}
 
 function confirmRepSend(employee,binding){
   const dialog=document.getElementById('repConfirmDialog');
-  document.getElementById('repConfirmEmployee').textContent=employee.name;
-  document.getElementById('repConfirmDevice').textContent=binding.device_name||binding.device_id||'REP';
+  resetRepConfirm(employee,binding);
   return new Promise(resolve=>{
     repConfirmResolve=resolve;
     dialog.showModal();
@@ -607,17 +644,81 @@ function confirmRepSend(employee,binding){
   });
 }
 
+function repConfirmPrimaryAction(){
+  const dialog=document.getElementById('repConfirmDialog');
+
+  if(repConfirmPhase==='confirm'){
+    repConfirmPhase='waiting';
+
+    document.getElementById('repConfirmTitle').textContent='Enviando ao REP';
+    document.getElementById('repConfirmSubtitle').textContent='Aguarde a confirmação do equipamento. Esta janela ficará aberta até o resultado.';
+    document.getElementById('repConfirmNote').hidden=true;
+
+    const cancel=document.getElementById('repConfirmCancel');
+    const submit=document.getElementById('repConfirmSubmit');
+    cancel.hidden=true;
+    submit.disabled=true;
+    submit.innerHTML=ico('sync')+'Aguardando...';
+
+    setRepConfirmStatus('waiting','Autorização enviada. Aguardando gravação, releitura e confirmação do REP...');
+
+    const resolve=repConfirmResolve;
+    repConfirmResolve=null;
+    if(resolve) resolve(true);
+    return;
+  }
+
+  if(repConfirmPhase==='result'){
+    repConfirmPhase='idle';
+    if(dialog.open) dialog.close();
+  }
+}
+
+function showRepConfirmResult(ok,message){
+  repConfirmPhase='result';
+
+  document.getElementById('repConfirmTitle').textContent=
+    ok?'Envio concluído':'Falha no envio';
+  document.getElementById('repConfirmSubtitle').textContent=
+    ok?'O REP confirmou a gravação do servidor.':'O REP não confirmou a gravação.';
+  document.getElementById('repConfirmNote').hidden=true;
+
+  setRepConfirmStatus(ok?'success':'error',message);
+
+  const cancel=document.getElementById('repConfirmCancel');
+  const submit=document.getElementById('repConfirmSubmit');
+  cancel.hidden=true;
+  submit.hidden=false;
+  submit.disabled=false;
+  submit.innerHTML=ok
+    ? ico('shield')+'Fechar'
+    : ico('alert')+'Fechar';
+
+  setTimeout(()=>submit.focus(),0);
+}
+
 function closeRepConfirm(confirmed){
   const dialog=document.getElementById('repConfirmDialog');
+
+  // Durante a gravação o modal permanece aberto até DONE/ERROR.
+  if(repConfirmPhase==='waiting') return;
+
+  if(repConfirmPhase==='confirm'){
+    const resolve=repConfirmResolve;
+    repConfirmResolve=null;
+    repConfirmPhase='idle';
+    if(dialog.open) dialog.close();
+    if(resolve) resolve(!!confirmed);
+    return;
+  }
+
+  repConfirmPhase='idle';
   if(dialog.open) dialog.close();
-  const resolve=repConfirmResolve;
-  repConfirmResolve=null;
-  if(resolve) resolve(!!confirmed);
 }
 
 document.getElementById('repConfirmDialog').addEventListener('cancel',ev=>{
   ev.preventDefault();
-  closeRepConfirm(false);
+  if(repConfirmPhase==='confirm') closeRepConfirm(false);
 });
 
 async function sendEmployeeToRep(id,deviceId,allowImported,btn){
@@ -645,28 +746,36 @@ async function sendEmployeeToRep(id,deviceId,allowImported,btn){
     });
     const b=await r.json().catch(()=>({}));
     if(!r.ok){
-      toast(b.message||b.error||'Falha ao autorizar envio ao REP.');
+      showRepConfirmResult(false,b.message||b.error||'Falha ao autorizar envio ao REP.');
       return;
     }
 
     const jobs=Array.isArray(b.jobs)?b.jobs:[];
     if(jobs.length!==1){
-      toast('O portal não recebeu um job único de envio.');
+      showRepConfirmResult(false,'O portal não recebeu um job único de envio.');
       return;
     }
 
     btn.innerHTML=ico('sync')+'Enviando...';
-    toast('Envio autorizado. Aguardando confirmação do REP...');
 
     const job=await waitForSyncJob(jobs[0]);
 
     if(job.status==='DONE'){
-      toast(`${employee.name} enviado e confirmado no REP.`);
+      showRepConfirmResult(
+        true,
+        `${employee.name} foi gravado e confirmado no REP com sucesso.`
+      );
     }else{
-      toast(`Falha no envio: ${job.error_message||'erro não detalhado'}`);
+      showRepConfirmResult(
+        false,
+        `Falha no envio: ${job.error_message||'erro não detalhado'}`
+      );
     }
   }catch(err){
-    toast(err?.message||'Falha ao acompanhar o envio ao REP.');
+    showRepConfirmResult(
+      false,
+      err?.message||'Falha ao acompanhar o envio ao REP.'
+    );
   }finally{
     btn.innerHTML=original;
     btn.disabled=false;
