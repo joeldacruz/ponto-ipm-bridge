@@ -195,6 +195,14 @@ namespace PontoCamara.TopdataAgent
             string initialNsrText = Environment.GetEnvironmentVariable("TOPDATA_INITIAL_NSR") ?? "43106";
             int initialNsr = Int32.Parse(initialNsrText);
 
+            string afdPollSecondsText =
+                Environment.GetEnvironmentVariable("TOPDATA_AFD_POLL_SECONDS") ?? "10";
+            int afdPollSeconds = Int32.Parse(afdPollSecondsText);
+            if (afdPollSeconds < 5)
+                afdPollSeconds = 5;
+
+            DateTime nextAfdPollUtc = DateTime.MinValue;
+
             TopdataSdkReader reader = new TopdataSdkReader(
                 settings.DeviceHost,
                 communicationKey,
@@ -222,18 +230,13 @@ namespace PontoCamara.TopdataAgent
                     api.SendHeartbeat(settings.AgentId, settings.DeviceId, online);
                     Console.WriteLine("[{0}] REP {1}", DateTime.Now, online ? "ONLINE" : "OFFLINE");
 
-                    if (online && reader.IsConfigured)
-                    {
-                        CollectAttendance(api, reader, settings.DeviceId, checkpointFile, initialNsr);
-                    }
-                    else if (online)
-                    {
-                        Console.WriteLine("Coleta SDK desativada: defina TOPDATA_SDK_PATH e TOPDATA_COMM_KEY.");
-                    }
+                    SyncJob[] jobs = new SyncJob[0];
 
+                    // Jobs do portal têm prioridade sobre a coleta AFD para não
+                    // disputar a sessão do REP nem atrasar uma gravação solicitada.
                     if (online)
                     {
-                        SyncJob[] jobs = api.GetJobs(settings.AgentId);
+                        jobs = api.GetJobs(settings.AgentId);
                         int i;
                         for (i = 0; i < jobs.Length; i++)
                         {
@@ -242,6 +245,25 @@ namespace PontoCamara.TopdataAgent
                             api.CompleteJob(job.id, result.ok, result.error);
                             Console.WriteLine("Job {0}: {1}", job.id, result.ok ? "OK" : result.error);
                         }
+
+                        if (jobs.Length > 0)
+                            nextAfdPollUtc = DateTime.UtcNow.AddSeconds(afdPollSeconds);
+                    }
+
+                    // A leitura AFD usa o SDK Topdata e abre comunicação com o REP.
+                    // Não a execute a cada heartbeat de 2 s: isso acumula sockets
+                    // FIN_WAIT_2 no Windows e pode interferir na escrita de empregados.
+                    if (online
+                        && reader.IsConfigured
+                        && jobs.Length == 0
+                        && DateTime.UtcNow >= nextAfdPollUtc)
+                    {
+                        nextAfdPollUtc = DateTime.UtcNow.AddSeconds(afdPollSeconds);
+                        CollectAttendance(api, reader, settings.DeviceId, checkpointFile, initialNsr);
+                    }
+                    else if (online && !reader.IsConfigured)
+                    {
+                        Console.WriteLine("Coleta SDK desativada: defina TOPDATA_SDK_PATH e TOPDATA_COMM_KEY.");
                     }
                 }
                 catch (Exception ex)
