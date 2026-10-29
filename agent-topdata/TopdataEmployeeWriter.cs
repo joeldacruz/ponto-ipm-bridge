@@ -126,16 +126,10 @@ namespace PontoCamara.TopdataAgent
                 SaveProtectedBackup(current, job.id);
 
                 object writeSdk = NewSession();
-                try
-                {
-                    LoadEmployerIntoSession(writeSdk);
-                    BuildEmployeeList(writeSdk, desired);
-                    StartEmployeeOnlyWrite(writeSdk);
-                }
-                finally
-                {
-                    TryFinalizeRead(writeSdk);
-                }
+                LoadEmployerIntoSession(writeSdk);
+                TryFinalizeRead(writeSdk);
+                BuildEmployeeList(writeSdk, desired);
+                StartEmployeeOnlyWrite(writeSdk);
 
                 string verifyError = VerifyDesiredState(desired, targetPis, targetPin);
                 if (verifyError != null)
@@ -472,7 +466,15 @@ namespace PontoCamara.TopdataAgent
 
             PropertyInfo chamadaSdk = manager.GetType().GetProperty("ChamadaSDK", flags);
             if (chamadaSdk != null && chamadaSdk.CanWrite)
+            {
                 chamadaSdk.SetValue(manager, true, null);
+            }
+            else
+            {
+                MethodInfo setChamadaSdk = manager.GetType().GetMethod("set_ChamadaSDK", flags);
+                if (setChamadaSdk != null)
+                    setChamadaSdk.Invoke(manager, new object[] { true });
+            }
 
             MethodInfo start = manager.GetType().GetMethod("IniciarProcesso", flags);
             if (start == null)
