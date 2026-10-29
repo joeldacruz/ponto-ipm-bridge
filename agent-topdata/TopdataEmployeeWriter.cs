@@ -615,8 +615,9 @@ namespace PontoCamara.TopdataAgent
         private void SaveProtectedBackup(List<TopdataEmployeeRecord> current, int jobId)
         {
             string dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "PontoCamara",
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "PontoCamara"),
                 "backups");
             Directory.CreateDirectory(dir);
 
