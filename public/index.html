@@ -140,8 +140,8 @@
     /* Formulário */
     .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr .8fr;gap:16px}
     .field label,.field .lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2)}
-    input[type=text],input:not([type]),input[inputmode]{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
-    input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
+    input[type=text],input:not([type]),input[inputmode],input[type=month],select{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
+    input:focus,select:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
     input::placeholder{color:#9aa6a1}
     input.invalid{border-color:var(--bad);box-shadow:0 0 0 3px rgba(166,58,50,.12)}
     .hint{display:block;margin-top:5px;font-size:12px;font-weight:400;color:var(--muted);min-height:16px}
@@ -155,6 +155,12 @@
     .check:has(input:checked){border-color:var(--brand-2);background:var(--brand-soft)}
     .formfoot{display:flex;align-items:center;gap:14px;margin-top:20px;flex-wrap:wrap}
     #formStatus{font-size:13.5px}
+    .export-grid{display:grid;grid-template-columns:180px minmax(240px,1fr) auto auto;gap:14px;align-items:end}
+    .export-help{margin-top:12px;font-size:12.5px;color:var(--muted)}
+    .toggle-line{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fafcfb}
+    .toggle-line input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--brand)}
+    .toggle-line strong{display:block;font-size:13.5px}
+    .toggle-line span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 
     .note{margin-top:18px;display:flex;gap:12px;align-items:flex-start;padding:14px 18px;background:var(--brand-soft);border:1px solid #cfe1d8;border-radius:var(--radius);font-size:13.5px;color:#27493b}
     .note svg{font-size:18px;color:var(--brand);margin-top:1px}
@@ -200,7 +206,7 @@
     }
 
     /* Responsivo */
-    @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:repeat(3,1fr)}.formgrid .field:first-child{grid-column:1/-1}}
+    @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi.lead{grid-column:span 2}.formgrid{grid-template-columns:repeat(3,1fr)}.formgrid .field:first-child{grid-column:1/-1}.export-grid{grid-template-columns:1fr 1fr}.export-grid .btn{width:100%}}
     @media(max-width:760px){
       .topbar .in,header.site .in,nav.sub .in,main,footer.site{padding-left:16px;padding-right:16px}
       .topbar .in span:last-child{display:none}
@@ -211,6 +217,7 @@
       .kpis{gap:10px}
       .kpi{padding:13px;gap:10px;flex-direction:column}.kpi .vl{font-size:24px}
       .formgrid{grid-template-columns:1fr}
+      .export-grid{grid-template-columns:1fr}
       .pagehead h1{font-size:21px}
       .pagehead .btn{width:100%}
       .panel-b{padding:16px}
@@ -251,6 +258,8 @@
     <symbol id="i-sync" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.500-5.800L20 8.500M20 4v4.500h-4.500M20 12a8 8 0 0 1-13.500 5.800L4 15.500M4 20v-4.500h4.500"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.500" y="3.500" width="7" height="7" rx="1.500"/><rect x="13.500" y="3.500" width="7" height="7" rx="1.500"/><rect x="3.500" y="13.500" width="7" height="7" rx="1.500"/><rect x="13.500" y="13.500" width="7" height="7" rx="1.500"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.500 6v5.500c0 4.500 3 8 7.500 9.500 4.500-1.500 7.500-5 7.500-9.500V6L12 3Z"/><path d="m9 12 2.200 2.200L15.500 10"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M4 5.5h16v11H9l-5 4v-15Z"/><path d="M8 10h8M8 13h5"/></symbol>
   </defs>
 </svg>
 
@@ -281,6 +290,7 @@
   <div class="in">
     <a href="#painel" class="on"><svg><use href="#i-grid"/></svg>Painel</a>
     <a href="#equipamentos"><svg><use href="#i-device"/></svg>Equipamentos</a>
+    <a href="#exportacoes"><svg><use href="#i-download"/></svg>Exportações</a>
     <a href="#novo-servidor"><svg><use href="#i-plus"/></svg>Novo servidor</a>
     <a href="#servidores"><svg><use href="#i-users"/></svg>Servidores</a>
   </div>
@@ -331,6 +341,37 @@
     </div>
   </section>
 
+  <section class="panel" id="exportacoes">
+    <div class="panel-h">
+      <h2><svg><use href="#i-download"/></svg>Arquivos para IPM</h2>
+      <span class="count">Download por competência</span>
+    </div>
+    <div class="panel-b">
+      <div class="export-grid">
+        <div class="field">
+          <label>Competência
+            <input id="exportPeriod" type="month">
+          </label>
+        </div>
+        <div class="field">
+          <label>REP
+            <select id="exportDevice"></select>
+          </label>
+        </div>
+        <button type="button" class="btn" onclick="downloadAttendance('afd',this)">
+          <svg><use href="#i-download"/></svg>Baixar AFD (TXT)
+        </button>
+        <button type="button" class="btn ghost" onclick="downloadAttendance('csv',this)">
+          <svg><use href="#i-download"/></svg>Baixar CSV
+        </button>
+      </div>
+      <div class="export-help">
+        O AFD (TXT) preserva as linhas reais de marcação tipo 3 coletadas do REP Topdata para homologação/importação no IPM.
+        O CSV é destinado à conferência administrativa.
+      </div>
+    </div>
+  </section>
+
   <section class="panel" id="novo-servidor">
     <div class="panel-h">
       <h2><svg><use href="#i-plus"/></svg>Novo servidor</h2>
@@ -364,8 +405,8 @@
     </div>
     <div class="tw">
       <table class="cards">
-        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>Status</th><th>REPs vinculados</th><th>PIN</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
-        <tbody id="employees"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
+        <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>Status</th><th>REPs vinculados</th><th>PIN</th><th>WhatsApp</th><th>Sincronização</th><th><span class="sr">Ações</span></th></tr></thead>
+        <tbody id="employees"><tr><td colspan="9" class="empty">Carregando...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -389,6 +430,30 @@
     <div class="row">
       <button class="btn ghost" value="cancel" type="button" onclick="closePinDialog()">Cancelar</button>
       <button class="btn" value="default" type="submit">Salvar PIN</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="whatsappDialog" class="pin-dialog">
+  <form class="box" id="whatsappForm">
+    <h3>Confirmação de batida por WhatsApp</h3>
+    <p id="whatsappEmployee"></p>
+    <div class="field">
+      <label>WhatsApp
+        <input id="whatsappNumber" type="tel" inputmode="numeric" maxlength="13" autocomplete="tel" placeholder="Ex.: 47999999999">
+      </label>
+      <span class="hint" id="whatsappHint">Informe DDD + número. O DDI 55 é acrescentado automaticamente.</span>
+    </div>
+    <label class="toggle-line">
+      <input id="whatsappEnabled" type="checkbox">
+      <span>
+        <strong>Receber confirmação das batidas</strong>
+        <span>A mensagem é enviada somente depois que uma nova batida for salva no sistema.</span>
+      </span>
+    </label>
+    <div class="row">
+      <button class="btn ghost" type="button" onclick="closeWhatsappDialog()">Cancelar</button>
+      <button class="btn" type="submit"><svg><use href="#i-message"/></svg>Salvar</button>
     </div>
   </form>
 </dialog>
@@ -529,6 +594,13 @@ async function load(){
       <span>${esc(d.name)} <span class="muted">(${d.role==='PRIMARY'?'Principal':'Secundário'})</span></span>
     </label>`).join('') || '<span class="muted">Cadastre um REP antes de vincular servidores.</span>';
 
+  const exportDevice=document.getElementById('exportDevice');
+  const previousExportDevice=exportDevice.value;
+  exportDevice.innerHTML=devices.filter(d=>d.active).map(d=>
+    `<option value="${esc(d.id)}">${esc(d.name)} · ${esc(d.vendor)}</option>`
+  ).join('');
+  if(previousExportDevice && devices.some(d=>d.id===previousExportDevice)) exportDevice.value=previousExportDevice;
+
   document.getElementById('employees').innerHTML=employees.length?employees.map(e=>{
     const bs=e.bindings||[];
     const isActive=!!e.active;
@@ -549,6 +621,11 @@ async function load(){
     const activeButton=isActive
       ? `<button type="button" class="btn danger sm" onclick="setEmployeeActive(${Number(e.id)},false,this)">Desativar</button>`
       : `<button type="button" class="btn ghost sm" onclick="setEmployeeActive(${Number(e.id)},true,this)">Reativar</button>`;
+    const whatsappStatus=e.whatsappAttendanceEnabled
+      ? '<span class="badge done">Ativo</span>'
+      : e.whatsappNumber
+        ? '<span class="badge inactive">Desativado</span>'
+        : '<span class="muted">Sem número</span>';
 
     return `<tr class="${isActive?'':'employee-inactive'}">
       <td data-label="Matrícula" class="mono">${esc(e.registration||'—')}</td>
@@ -557,11 +634,53 @@ async function load(){
       <td data-label="Status">${isActive?'<span class="badge done">Ativo</span>':'<span class="badge inactive">Desativado</span>'}</td>
       <td data-label="REPs vinculados">${bs.length?'<div class="chips">'+bs.map(b=>'<span class="chip">'+esc(b.device_name)+'</span>').join('')+'</div>':'<span class="muted">Nenhum</span>'}</td>
       <td data-label="PIN"><span class="pin-state">${e.pinConfigured?'<span class="badge done">Configurado</span>':'<span class="badge pending">Não definido</span>'}</span></td>
+      <td data-label="WhatsApp">${whatsappStatus}</td>
       <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
-      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button>${syncButton}${activeButton}</div></td>
+      <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button><button type="button" class="btn ghost sm" onclick="openWhatsappDialog(${Number(e.id)})">${ico('message')}WhatsApp</button>${syncButton}${activeButton}</div></td>
     </tr>`;
-  }).join(''):'<tr><td colspan="8" class="empty">Nenhum servidor cadastrado.</td></tr>';
+  }).join(''):'<tr><td colspan="9" class="empty">Nenhum servidor cadastrado.</td></tr>';
   } finally { btn.disabled=false;btn.classList.remove('busy'); }
+}
+
+async function downloadAttendance(format,btn){
+  const period=document.getElementById('exportPeriod').value;
+  const deviceId=document.getElementById('exportDevice').value;
+  if(!period||!deviceId){
+    toast('Selecione a competência e o REP.');
+    return;
+  }
+
+  const original=btn.innerHTML;
+  btn.disabled=true;
+  btn.innerHTML=ico('download')+'Preparando...';
+
+  try{
+    const response=await fetch(`/api/exports/${format}/${encodeURIComponent(period)}?deviceId=${encodeURIComponent(deviceId)}`);
+    if(!response.ok){
+      const body=await response.json().catch(()=>({}));
+      throw new Error(body.message||body.error||'Não foi possível gerar o arquivo.');
+    }
+
+    const blob=await response.blob();
+    const disposition=response.headers.get('content-disposition')||'';
+    const match=/filename="([^"]+)"/.exec(disposition);
+    const fileName=match?.[1]||`ponto-${period}.${format==='afd'?'txt':'csv'}`;
+
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast(`${fileName} gerado com sucesso.`);
+  }catch(err){
+    toast(err?.message||'Falha ao gerar arquivo.');
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML=original;
+  }
 }
 
 async function setEmployeeActive(id,active,btn){
@@ -848,6 +967,67 @@ document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   await load();
 });
 
+let whatsappEmployeeId=null;
+
+function openWhatsappDialog(id){
+  const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
+  if(!employee) return;
+
+  whatsappEmployeeId=id;
+  document.getElementById('whatsappEmployee').textContent=employee.name;
+  const number=document.getElementById('whatsappNumber');
+  number.value=employee.whatsappNumber||'';
+  number.classList.remove('invalid');
+  document.getElementById('whatsappEnabled').checked=!!employee.whatsappAttendanceEnabled;
+  document.getElementById('whatsappHint').textContent='Informe DDD + número. O DDI 55 é acrescentado automaticamente.';
+  document.getElementById('whatsappDialog').showModal();
+  setTimeout(()=>number.focus(),0);
+}
+
+function closeWhatsappDialog(){
+  const dialog=document.getElementById('whatsappDialog');
+  if(dialog.open) dialog.close();
+  whatsappEmployeeId=null;
+}
+
+document.getElementById('whatsappNumber').addEventListener('input',e=>{
+  e.target.value=onlyDigits(e.target.value).slice(0,13);
+  e.target.classList.remove('invalid');
+  document.getElementById('whatsappHint').textContent='Informe DDD + número. O DDI 55 é acrescentado automaticamente.';
+});
+
+document.getElementById('whatsappForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const number=onlyDigits(document.getElementById('whatsappNumber').value);
+  const enabled=document.getElementById('whatsappEnabled').checked;
+
+  if(enabled && !(number.length===10||number.length===11||number.length===12||number.length===13)){
+    document.getElementById('whatsappNumber').classList.add('invalid');
+    document.getElementById('whatsappHint').textContent='Informe um número brasileiro válido com DDD.';
+    return;
+  }
+
+  const response=await fetch(`/api/employees/${whatsappEmployeeId}/whatsapp`,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({number:number||null,enabled})
+  });
+  const body=await response.json().catch(()=>({}));
+
+  if(!response.ok){
+    document.getElementById('whatsappHint').textContent=body.message||body.error||'Falha ao salvar WhatsApp.';
+    return;
+  }
+
+  closeWhatsappDialog();
+  toast(enabled
+    ? (body.gatewayConfigured
+        ? 'Confirmação de batidas por WhatsApp ativada.'
+        : 'WhatsApp ativado para o servidor; gateway ainda não configurado no Ponto.')
+    : 'Confirmação por WhatsApp desativada.');
+  await load();
+});
+
 let pinEmployeeId=null;
 function openPinDialog(id){
   const employee=(window._employees||[]).find(e=>Number(e.id)===Number(id));
@@ -898,6 +1078,10 @@ document.getElementById('pinForm').addEventListener('submit',async ev=>{
 document.querySelectorAll('nav.sub a').forEach(a=>a.addEventListener('click',()=>{
   document.querySelectorAll('nav.sub a').forEach(x=>x.classList.toggle('on',x===a));
 }));
+
+const exportNow=new Date();
+document.getElementById('exportPeriod').value=
+  `${exportNow.getFullYear()}-${String(exportNow.getMonth()+1).padStart(2,'0')}`;
 
 load().catch(err=>console.error(err));
 </script>
