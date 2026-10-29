@@ -12,6 +12,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-employees-'));
 process.env.DB_PATH = path.join(tmp, 'ponto.db');
 process.env.AGENT_TOKEN = 'test-agent-token-portal-write';
 process.env.PIN_ENCRYPTION_KEY = '11'.repeat(32);
+process.env.AUTH_RESET_PEPPER = '22'.repeat(32);
 delete process.env.TOPDATA_HOST;
 
 let db: typeof import('../src/storage/db.js')['db'];
@@ -23,11 +24,19 @@ let router: typeof import('../src/http/routes.js')['router'];
 let express: any;
 
 const DEV = 'rep-topdata-02';
+const TEST_EMAIL = 'joeldacruz@gmail.com';
+const TEST_PASSWORD = 'SenhaTeste#2026';
+
 test.before(async () => {
   ({ db } = await import('../src/storage/db.js'));
   ({ runImport, parseRecords, eventsFingerprint, validateSchema } = await import('../src/services/importEmployees.js'));
   ({ router } = await import('../src/http/routes.js'));
   express = (await import('express')).default;
+
+  const { hashPassword } = await import('../src/security/auth.js');
+  db.prepare('UPDATE app_users SET password_hash=? WHERE lower(email)=lower(?)')
+    .run(hashPassword(TEST_PASSWORD), TEST_EMAIL);
+
   db.prepare(`INSERT INTO devices(id,name,vendor,model,role,transport,host,port,agent_id) VALUES(?,?,?,?,?,?,?,?,?)`)
     .run(DEV, 'REP 02 - Topdata contingência', 'TOPDATA', 'Inner REP Bio', 'SECONDARY', 'WINDOWS_AGENT', '10.0.0.2', 51000, 'agent');
 });
@@ -40,7 +49,28 @@ const B = rec('BRUNO TESTE', '1002-00', '10987654321');
 const C = rec('CARLA CPF', '1003-00', '52998224725', 'CPF');
 
 function wipe() {
-  db.exec('DELETE FROM sync_jobs; DELETE FROM employee_device_bindings; DELETE FROM employees; DELETE FROM device_events; DELETE FROM audit_log;');
+  db.exec('DELETE FROM sync_jobs; DELETE FROM employee_device_bindings; DELETE FROM employees; DELETE FROM device_events; DELETE FROM audit_log; DELETE FROM app_sessions; DELETE FROM password_reset_codes;');
+}
+
+async function loginCookie(base: string): Promise<string> {
+  const response = await fetch(base + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD })
+  });
+
+  assert.equal(response.status, 200);
+  const raw = response.headers.get('set-cookie') || '';
+  const cookie = raw.split(';', 1)[0];
+  assert.match(cookie, /^ponto_session=/);
+  return cookie;
+}
+
+async function authenticatedGet(base: string, url: string): Promise<Response> {
+  const cookie = await loginCookie(base);
+  return fetch(base + url, {
+    headers: { Cookie: cookie }
+  });
 }
 function addEvent(no: string, nsr: number) {
   db.prepare(`INSERT INTO device_events(source_id,device_id,employee_no,occurred_at,kind,nsr,raw_payload) VALUES(?,?,?,?,?,?,?)`)
@@ -135,12 +165,14 @@ test('batidas históricas passam a exibir o nome em GET /api/events/attendance',
   const app = express(); app.use(express.json()); app.use(router);
   const server = app.listen(0);
   try {
-    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/events/attendance`;
-    const antes = await (await fetch(url)).json() as any[];
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const cookie = await loginCookie(base);
+    const url = base + '/api/events/attendance';
+    const antes = await (await fetch(url, { headers: { Cookie: cookie } })).json() as any[];
     assert.equal(antes.filter((e) => e.name).length, 0);
     const r = runImport(db, [A, B], { apply: true });
     assert.deepEqual([r.attendance.before, r.attendance.after, r.attendance.total], [0, 3, 4]);
-    const depois = await (await fetch(url)).json() as any[];
+    const depois = await (await fetch(url, { headers: { Cookie: cookie } })).json() as any[];
     assert.equal(depois.length, 4);
     assert.deepEqual(depois.filter((e) => e.employee_no === A.deviceEmployeeNo).map((e) => e.name), ['ANA TESTE', 'ANA TESTE', 'ANA TESTE']);
     assert.equal(depois.find((e) => e.employee_no === '55555555555').name, null);
@@ -159,10 +191,14 @@ async function withApi<T>(
   const app = express(); app.use(express.json()); app.use(router);
   const server = app.listen(0);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const cookie = await loginCookie(base);
   const post = async (url: string, body: unknown = {}, method: 'POST' | 'PUT' = 'POST') => {
     const r = await fetch(base + url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie
+      },
       body: JSON.stringify(body)
     });
     const text = await r.text();
@@ -364,7 +400,10 @@ test('PIS de 12 posições (0 + PIS de 11) encontra o vínculo; 11 dígitos cont
   const app = express(); app.use(express.json()); app.use(router);
   const server = app.listen(0);
   try {
-    const rows = await (await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/events/attendance`)).json() as any[];
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const response = await authenticatedGet(base, '/api/events/attendance');
+    assert.equal(response.status, 200);
+    const rows = await response.json() as any[];
     const nomes = new Map(rows.map((e) => [e.nsr, e.name]));
     assert.equal(nomes.get(10), 'SERVIDOR PIS');
     assert.equal(nomes.get(11), 'SERVIDOR PIS');
@@ -530,11 +569,12 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
   app.use(router);
   const server = app.listen(0);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const cookie = await loginCookie(base);
 
   try {
     const create = await fetch(base + '/api/employees', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({
         name: 'SERVIDOR DESATIVAVEL',
         registration: '7000-00',
@@ -549,7 +589,7 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
 
     const deactivate = await fetch(base + `/api/employees/${created.id}/active`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ active: false })
     });
     assert.equal(deactivate.status, 200);
@@ -567,7 +607,7 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
 
     const syncInactive = await fetch(base + `/api/employees/${created.id}/sync`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: '{}'
     });
     assert.equal(syncInactive.status, 409);
@@ -576,7 +616,7 @@ test('desativar/reativar preserva histórico e não envia exclusão ao REP', asy
 
     const reactivate = await fetch(base + `/api/employees/${created.id}/active`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ active: true })
     });
     assert.equal(reactivate.status, 200);
