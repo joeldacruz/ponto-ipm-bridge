@@ -3,13 +3,24 @@ import { db } from '../storage/db.js';
 import { listAttendance, saveEvents } from '../services/events.js';
 import {
   buildAttendanceAfdDownload,
+  buildAttendanceAfdDailyDownload,
   buildGenericCsvDownload,
+  buildGenericCsvDailyDownload,
   exportGenericCsv
 } from '../services/exporter.js';
 import { isWhatsappGatewayConfigured, normalizeWhatsappNumber } from '../services/whatsapp.js';
 import { completeJob, countSyncTargets, leaseJobs, queueEmployeeSync } from '../services/sync.js';
 import type { DeviceEvent } from '../core/types.js';
 import { encryptPin, isValidPin } from '../security/pin.js';
+import {
+  authenticateUser,
+  createUserSession,
+  destroyUserSession,
+  getSessionUser,
+  requestPasswordRecovery,
+  requireApiSession,
+  resetPasswordWithCode
+} from '../security/auth.js';
 
 export const router = Router();
 
@@ -28,6 +39,110 @@ function requireAgent(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+
+router.post('/api/auth/login', (req, res) => {
+  const email = String(req.body?.email || '').trim();
+  const password = String(req.body?.password || '');
+
+  const result = authenticateUser(email, password);
+  if (!result.ok) {
+    return res.status(result.error === 'password_not_set' ? 409 : 401).json({
+      error: result.error,
+      message: result.error === 'password_not_set'
+        ? 'Senha ainda não definida. Use Recuperar/definir senha.'
+        : 'E-mail ou senha inválidos.'
+    });
+  }
+
+  createUserSession(req, res, result.user.id);
+  audit('USER_LOGIN', 'app_user', result.user.id, { email: result.user.email });
+  res.json({
+    ok: true,
+    user: {
+      id: result.user.id,
+      name: result.user.name,
+      email: result.user.email,
+      role: result.user.role
+    }
+  });
+});
+
+router.post('/api/auth/logout', (req, res) => {
+  const user = getSessionUser(req);
+  destroyUserSession(req, res);
+  if (user) audit('USER_LOGOUT', 'app_user', user.id, {});
+  res.json({ ok: true });
+});
+
+router.get('/api/auth/me', requireApiSession, (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'login_required' });
+  res.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    whatsappRecoveryAvailable: !!user.whatsapp_number
+  });
+});
+
+router.post('/api/auth/recovery/request', async (req, res) => {
+  const email = String(req.body?.email || '').trim();
+  const channel = String(req.body?.channel || '').toUpperCase();
+
+  if (!email || !['EMAIL','WHATSAPP'].includes(channel)) {
+    return res.status(400).json({ error: 'email_and_channel_required' });
+  }
+
+  try {
+    const result = await requestPasswordRecovery(
+      email,
+      channel as 'EMAIL' | 'WHATSAPP'
+    );
+    res.json(result);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'recovery_error';
+    const messages: Record<string, string> = {
+      RECOVERY_RATE_LIMIT: 'Aguarde 60 segundos antes de solicitar outro código.',
+      GMAIL_RECOVERY_NOT_CONFIGURED: 'Recuperação por e-mail ainda não foi configurada no servidor.',
+      WHATSAPP_RECOVERY_NOT_CONFIGURED: 'Este usuário ainda não possui WhatsApp configurado para recuperação.',
+      AUTH_RESET_PEPPER_NOT_CONFIGURED: 'A recuperação de senha ainda não foi inicializada no servidor.'
+    };
+    res.status(detail === 'RECOVERY_RATE_LIMIT' ? 429 : 503).json({
+      error: detail,
+      message: messages[detail] || 'Não foi possível enviar o código de recuperação.'
+    });
+  }
+});
+
+router.post('/api/auth/recovery/reset', (req, res) => {
+  const email = String(req.body?.email || '').trim();
+  const code = String(req.body?.code || '').trim();
+  const password = String(req.body?.password || '');
+
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({
+      error: 'invalid_code_format',
+      message: 'O código deve ter 6 dígitos.'
+    });
+  }
+
+  try {
+    resetPasswordWithCode(email, code, password);
+    audit('USER_PASSWORD_RESET', 'app_user', null, { email });
+    res.json({ ok: true, message: 'Senha definida com sucesso.' });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'reset_error';
+    const status = detail === 'PASSWORD_POLICY' ? 400 : 401;
+    res.status(status).json({
+      error: detail,
+      message: detail === 'PASSWORD_POLICY'
+        ? 'A nova senha deve ter entre 10 e 128 caracteres.'
+        : 'Código inválido ou expirado.'
+    });
+  }
+});
+
 router.get('/health', (_req, res) => {
   const devices = db.prepare(`
     SELECT
@@ -38,6 +153,13 @@ router.get('/health', (_req, res) => {
   const employees = db.prepare('SELECT COUNT(*) AS total FROM employees WHERE active=1').get();
   const attendance = db.prepare("SELECT COUNT(*) AS total FROM device_events WHERE kind='ATTENDANCE'").get();
   res.json({ ok: true, devices, employees, attendance });
+});
+
+// Portal humano: todas as APIs, exceto o agente, exigem sessão autenticada.
+router.use((req, res, next) => {
+  if (req.path.startsWith('/api/agent/')) return next();
+  if (req.path.startsWith('/api/')) return requireApiSession(req, res, next);
+  next();
 });
 
 router.get('/api/devices', (_req, res) => {
@@ -527,6 +649,71 @@ router.post('/api/agent/events', requireAgent, (req, res) => {
   `).run(deviceId);
   audit('EVENTS_INGEST', 'device', deviceId, { received: events.length, inserted });
   res.status(201).json({ received: events.length, inserted });
+});
+
+
+router.get('/api/exports/afd-day/:date', (req, res) => {
+  const date = req.params.date;
+  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : '';
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Data deve ser AAAA-MM-DD' });
+  }
+  if (!deviceId) return res.status(400).json({ error: 'deviceId é obrigatório' });
+
+  const device = db.prepare('SELECT id, vendor FROM devices WHERE id=?').get(deviceId) as
+    | { id: string; vendor: string }
+    | undefined;
+  if (!device) return res.status(404).json({ error: 'device_not_found' });
+  if (String(device.vendor).toUpperCase() !== 'TOPDATA') {
+    return res.status(409).json({
+      error: 'afd_raw_only_topdata',
+      message: 'O AFD bruto está habilitado somente para o REP Topdata validado.'
+    });
+  }
+
+  const out = buildAttendanceAfdDailyDownload(date, deviceId);
+  if (out.count === 0) {
+    return res.status(404).json({
+      error: 'no_attendance_for_date',
+      message: 'Nenhuma marcação AFD válida foi encontrada para este REP e dia.',
+      skipped: out.skipped
+    });
+  }
+
+  audit('ATTENDANCE_EXPORT_AFD_DAILY', 'device', deviceId, {
+    date,
+    count: out.count,
+    skipped: out.skipped
+  });
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+  res.send(out.content);
+});
+
+router.get('/api/exports/csv-day/:date', (req, res) => {
+  const date = req.params.date;
+  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : '';
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Data deve ser AAAA-MM-DD' });
+  }
+  if (!deviceId) return res.status(400).json({ error: 'deviceId é obrigatório' });
+
+  const device = db.prepare('SELECT id FROM devices WHERE id=?').get(deviceId);
+  if (!device) return res.status(404).json({ error: 'device_not_found' });
+
+  const out = buildGenericCsvDailyDownload(date, deviceId);
+
+  audit('ATTENDANCE_EXPORT_CSV_DAILY', 'device', deviceId, {
+    date,
+    count: out.count
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+  res.send(out.content);
 });
 
 router.get('/api/exports/afd/:period', (req, res) => {
