@@ -24,6 +24,35 @@ import {
 
 export const router = Router();
 
+const loginAttempts = new Map<string, { failures: number; blockedUntil: number }>();
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_BLOCK_MS = 15 * 60 * 1000;
+
+function loginAttemptKey(req: Request, email: string): string {
+  return `${req.ip || req.socket.remoteAddress || 'unknown'}|${email.trim().toLowerCase()}`;
+}
+
+function loginBlocked(key: string): boolean {
+  const item = loginAttempts.get(key);
+  if (!item) return false;
+  if (item.blockedUntil > Date.now()) return true;
+  if (item.blockedUntil) loginAttempts.delete(key);
+  return false;
+}
+
+function registerLoginFailure(key: string): void {
+  const current = loginAttempts.get(key) || { failures: 0, blockedUntil: 0 };
+  current.failures += 1;
+  if (current.failures >= LOGIN_MAX_FAILURES) {
+    current.blockedUntil = Date.now() + LOGIN_BLOCK_MS;
+  }
+  loginAttempts.set(key, current);
+}
+
+function clearLoginFailures(key: string): void {
+  loginAttempts.delete(key);
+}
+
 function audit(action: string, entityType: string, entityId: string | number | null, detail: unknown = {}) {
   db.prepare(`
     INSERT INTO audit_log(action,entity_type,entity_id,detail_json)
@@ -43,9 +72,18 @@ function requireAgent(req: Request, res: Response, next: NextFunction) {
 router.post('/api/auth/login', (req, res) => {
   const email = String(req.body?.email || '').trim();
   const password = String(req.body?.password || '');
+  const attemptKey = loginAttemptKey(req, email);
+
+  if (loginBlocked(attemptKey)) {
+    return res.status(429).json({
+      error: 'login_temporarily_blocked',
+      message: 'Muitas tentativas. Aguarde 15 minutos ou redefina a senha.'
+    });
+  }
 
   const result = authenticateUser(email, password);
   if (!result.ok) {
+    if (result.error !== 'password_not_set') registerLoginFailure(attemptKey);
     return res.status(result.error === 'password_not_set' ? 409 : 401).json({
       error: result.error,
       message: result.error === 'password_not_set'
@@ -54,6 +92,7 @@ router.post('/api/auth/login', (req, res) => {
     });
   }
 
+  clearLoginFailures(attemptKey);
   createUserSession(req, res, result.user.id);
   audit('USER_LOGIN', 'app_user', result.user.id, { email: result.user.email });
   res.json({
