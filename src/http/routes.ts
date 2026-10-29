@@ -285,14 +285,34 @@ router.post('/api/employees/:id/sync', (req, res) => {
       });
     }
 
-    const targets = countSyncTargets(employeeId, req.body?.deviceId);
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : undefined;
+    const allowImported = req.body?.allowImported === true;
+
+    if (allowImported && !deviceId) {
+      return res.status(400).json({
+        error: 'allow_imported_requires_device',
+        message: 'Para liberar um cadastro importado, informe explicitamente um único REP.'
+      });
+    }
+
+    const targets = countSyncTargets(employeeId, deviceId, allowImported);
     if (targets.eligible === 0 && targets.blocked > 0) {
       return res.status(409).json({
         error: 'sync_blocked_imported',
         message: 'Cadastro importado: a sincronização com o REP está bloqueada para este vínculo.'
       });
     }
-    const jobs = queueEmployeeSync(employeeId, req.body?.deviceId);
+
+    const jobs = queueEmployeeSync(employeeId, deviceId, allowImported);
+
+    if (allowImported && targets.blocked > 0 && jobs.length > 0) {
+      audit('EMPLOYEE_SYNC_IMPORTED_OVERRIDE', 'employee', employeeId, {
+        deviceId,
+        jobs,
+        explicit: true
+      });
+    }
+
     res.json({ ok: true, jobs });
   } catch (error) {
     res.status(404).json({ error: error instanceof Error ? error.message : 'sync_error' });
