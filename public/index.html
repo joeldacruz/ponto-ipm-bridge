@@ -40,9 +40,13 @@
     .brand-text .sys{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
     .brand-text .sys i{width:5px;height:5px;border-radius:50%;background:var(--gold);display:inline-block}
     .spacer{flex:1}
-    .user{display:flex;align-items:center;gap:10px;padding:5px 12px 5px 6px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+    .user{display:flex;align-items:center;gap:9px;padding:5px 6px 5px 6px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
     .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-size:17px}
-    .user b{display:block;font-size:13px;line-height:1.2}.user div span{display:block;font-size:11.5px;color:var(--muted);line-height:1.2}
+    .user-meta{min-width:0}
+    .user b{display:block;font-size:13px;line-height:1.2;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .user .user-meta span{display:block;font-size:11.5px;color:var(--muted);line-height:1.2}
+    .logout-btn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:650;padding:7px 9px;border-radius:999px;cursor:pointer}
+    .logout-btn:hover{background:var(--line-2);color:var(--brand)}
 
     /* Navegação */
     nav.sub{background:var(--surface);border-bottom:1px solid var(--line)}
@@ -187,7 +191,7 @@
     /* Formulário */
     .formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr .8fr;gap:16px}
     .field label,.field .lbl{display:block;font-size:13px;font-weight:600;color:var(--ink-2)}
-    input[type=text],input:not([type]),input[inputmode],input[type=month],select{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
+    input[type=text],input:not([type]),input[inputmode],input[type=month],input[type=date],select{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cdd6d2;border-radius:9px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
     input:focus,select:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
     input::placeholder{color:#9aa6a1}
     input.invalid{border-color:var(--bad);box-shadow:0 0 0 3px rgba(166,58,50,.12)}
@@ -202,7 +206,7 @@
     .check:has(input:checked){border-color:var(--brand-2);background:var(--brand-soft)}
     .formfoot{display:flex;align-items:center;gap:14px;margin-top:20px;flex-wrap:wrap}
     #formStatus{font-size:13.5px}
-    .export-grid{display:grid;grid-template-columns:180px minmax(240px,1fr) auto auto;gap:14px;align-items:end}
+    .export-grid{display:grid;grid-template-columns:150px 180px minmax(240px,1fr) auto auto;gap:14px;align-items:end}
     .export-help{margin-top:12px;font-size:12.5px;color:var(--muted)}
     .toggle-line{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fafcfb}
     .toggle-line input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--brand)}
@@ -260,7 +264,7 @@
       .crest{width:40px;height:44px}.crest-ph{width:38px;height:44px}
       .brand-text .org{font-size:10.5px}.brand-text .name{font-size:15.5px;white-space:normal}
       .brand-text .sys{font-size:12px}
-      .user div{display:none}.user{padding:3px}
+      .user-meta{display:none}.user{padding:3px}.logout-btn{padding:7px 8px}
       .kpis{gap:10px}
       .kpi{padding:13px;gap:10px;flex-direction:column}.kpi .vl{font-size:24px}
       .formgrid{grid-template-columns:1fr}
@@ -333,9 +337,10 @@
       </span>
     </a>
     <div class="spacer"></div>
-    <div class="user" title="Perfil do usuário">
+    <div class="user" title="Usuário conectado">
       <span class="avatar"><svg><use href="#i-user"/></svg></span>
-      <div><b>Administração</b><span>Ponto Eletrônico</span></div>
+      <div class="user-meta"><b id="currentUserName">Carregando...</b><span id="currentUserRole">Ponto Eletrônico</span></div>
+      <button type="button" class="logout-btn" onclick="logoutPortal()">Sair</button>
     </div>
   </div>
 </header>
@@ -398,13 +403,26 @@
   <section class="panel" id="exportacoes">
     <div class="panel-h">
       <h2><svg><use href="#i-download"/></svg>Arquivos para IPM</h2>
-      <span class="count">Download por competência</span>
+      <span class="count" id="exportModeBadge">Download por competência</span>
     </div>
     <div class="panel-b">
       <div class="export-grid">
         <div class="field">
+          <label>Período
+            <select id="exportScope" onchange="updateExportScope()">
+              <option value="month">Por competência</option>
+              <option value="day">Por dia</option>
+            </select>
+          </label>
+        </div>
+        <div class="field" id="exportPeriodWrap">
           <label>Competência
             <input id="exportPeriod" type="month">
+          </label>
+        </div>
+        <div class="field" id="exportDateWrap" hidden>
+          <label>Dia
+            <input id="exportDate" type="date">
           </label>
         </div>
         <div class="field">
@@ -421,7 +439,7 @@
       </div>
       <div class="export-help">
         O AFD (TXT) preserva as linhas reais de marcação tipo 3 coletadas do REP Topdata para homologação/importação no IPM.
-        O CSV é destinado à conferência administrativa.
+        Você pode baixar por competência ou por um dia específico. O CSV é destinado à conferência administrativa.
       </div>
     </div>
   </section>
@@ -554,6 +572,36 @@ const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':
 const ico=(n)=>`<svg><use href="#i-${n}"/></svg>`;
 const nf=new Intl.NumberFormat('pt-BR');
 const num=(v)=>nf.format(Number(v)||0);
+
+async function loadCurrentUser(){
+  const r=await fetch('/api/auth/me');
+  if(r.status===401){
+    location.href='/login.html?next='+encodeURIComponent(location.pathname);
+    return;
+  }
+  const user=await r.json();
+  document.getElementById('currentUserName').textContent=user.name||user.email||'Usuário';
+  document.getElementById('currentUserRole').textContent=
+    user.role==='ADMIN'?'Administrador':'Operador';
+}
+
+async function logoutPortal(){
+  try{
+    await fetch('/api/auth/logout',{method:'POST'});
+  }finally{
+    location.href='/login.html';
+  }
+}
+
+function updateExportScope(){
+  const scope=document.getElementById('exportScope').value;
+  const daily=scope==='day';
+  document.getElementById('exportPeriodWrap').hidden=daily;
+  document.getElementById('exportDateWrap').hidden=!daily;
+  document.getElementById('exportModeBadge').textContent=
+    daily?'Download por dia':'Download por competência';
+}
+
 
 // SQLite grava CURRENT_TIMESTAMP em UTC ("AAAA-MM-DD HH:MM:SS")
 function parseTs(s){
@@ -723,10 +771,14 @@ async function load(options={}){
 }
 
 async function downloadAttendance(format,btn){
+  const scope=document.getElementById('exportScope').value;
   const period=document.getElementById('exportPeriod').value;
+  const date=document.getElementById('exportDate').value;
   const deviceId=document.getElementById('exportDevice').value;
-  if(!period||!deviceId){
-    toast('Selecione a competência e o REP.');
+  const value=scope==='day'?date:period;
+
+  if(!value||!deviceId){
+    toast(scope==='day'?'Selecione o dia e o REP.':'Selecione a competência e o REP.');
     return;
   }
 
@@ -735,7 +787,15 @@ async function downloadAttendance(format,btn){
   btn.innerHTML=ico('download')+'Preparando...';
 
   try{
-    const response=await fetch(`/api/exports/${format}/${encodeURIComponent(period)}?deviceId=${encodeURIComponent(deviceId)}`);
+    const route=scope==='day'
+      ? `/api/exports/${format}-day/${encodeURIComponent(value)}?deviceId=${encodeURIComponent(deviceId)}`
+      : `/api/exports/${format}/${encodeURIComponent(value)}?deviceId=${encodeURIComponent(deviceId)}`;
+
+    const response=await fetch(route);
+    if(response.status===401){
+      location.href='/login.html?next='+encodeURIComponent(location.pathname);
+      return;
+    }
     if(!response.ok){
       const body=await response.json().catch(()=>({}));
       throw new Error(body.message||body.error||'Não foi possível gerar o arquivo.');
@@ -744,7 +804,7 @@ async function downloadAttendance(format,btn){
     const blob=await response.blob();
     const disposition=response.headers.get('content-disposition')||'';
     const match=/filename="([^"]+)"/.exec(disposition);
-    const fileName=match?.[1]||`ponto-${period}.${format==='afd'?'txt':'csv'}`;
+    const fileName=match?.[1]||`ponto-${value}.${format==='afd'?'txt':'csv'}`;
 
     const url=URL.createObjectURL(blob);
     const link=document.createElement('a');
@@ -1162,6 +1222,9 @@ document.querySelectorAll('nav.sub a').forEach(a=>a.addEventListener('click',()=
 const exportNow=new Date();
 document.getElementById('exportPeriod').value=
   `${exportNow.getFullYear()}-${String(exportNow.getMonth()+1).padStart(2,'0')}`;
+document.getElementById('exportDate').value=
+  `${exportNow.getFullYear()}-${String(exportNow.getMonth()+1).padStart(2,'0')}-${String(exportNow.getDate()).padStart(2,'0')}`;
+updateExportScope();
 
 const AUTO_REFRESH_MS=2000;
 setInterval(()=>{
@@ -1170,6 +1233,7 @@ setInterval(()=>{
   load({silent:true}).catch(err=>console.error(err));
 },AUTO_REFRESH_MS);
 
+loadCurrentUser().catch(err=>console.error(err));
 load().catch(err=>console.error(err));
 </script>
 </body>
