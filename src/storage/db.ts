@@ -163,7 +163,7 @@ if (topdataHost) {
     INSERT OR IGNORE INTO devices
       (id,name,vendor,model,role,transport,host,port,agent_id)
     VALUES
-      ('rep-topdata-02','REP 02 - Topdata contingência','TOPDATA','Inner REP Bio','SECONDARY','WINDOWS_AGENT',?,?,?)
+      ('rep-topdata-02','REP 02 - Topdata','TOPDATA','Inner REP Bio','SECONDARY','WINDOWS_AGENT',?,?,?)
   `).run(
     topdataHost,
     Number(process.env.TOPDATA_PORT || 51000),
