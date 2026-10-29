@@ -167,6 +167,57 @@ router.post('/api/employees', (req, res) => {
   res.status(201).json({ id: employeeId, syncJobs: jobs });
 });
 
+router.put('/api/employees/:id/active', (req, res) => {
+  const employeeId = Number(req.params.id);
+  const active = req.body?.active;
+
+  if (!employeeId) return res.status(400).json({ error: 'employeeId inválido' });
+  if (typeof active !== 'boolean') {
+    return res.status(400).json({ error: 'active deve ser booleano' });
+  }
+
+  const employee = db.prepare('SELECT id, name, active FROM employees WHERE id=?').get(employeeId) as
+    | { id: number; name: string; active: number }
+    | undefined;
+
+  if (!employee) return res.status(404).json({ error: 'employee_not_found' });
+
+  const desired = active ? 1 : 0;
+  if (employee.active === desired) {
+    return res.json({ ok: true, active: !!employee.active, changed: false });
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE employees SET active=? WHERE id=?').run(desired, employeeId);
+
+    if (!active) {
+      db.prepare(`
+        UPDATE sync_jobs
+        SET status='ERROR',
+            completed_at=CURRENT_TIMESTAMP,
+            error_message='EMPLOYEE_DEACTIVATED'
+        WHERE employee_id=? AND status='PENDING'
+      `).run(employeeId);
+    }
+
+    audit(active ? 'EMPLOYEE_ACTIVATE' : 'EMPLOYEE_DEACTIVATE', 'employee', employeeId, {
+      active,
+      repWrite: false
+    });
+  });
+
+  tx();
+
+  res.json({
+    ok: true,
+    active,
+    changed: true,
+    message: active
+      ? 'Servidor reativado no sistema central.'
+      : 'Servidor desativado no sistema central. Nenhuma exclusão foi enviada ao REP.'
+  });
+});
+
 router.put('/api/employees/:id/pin', (req, res) => {
   const employeeId = Number(req.params.id);
   const pin = req.body?.pin;
@@ -216,21 +267,32 @@ router.post('/api/employees/:id/bindings', (req, res) => {
       updated_at=CURRENT_TIMESTAMP
   `).run(employeeId, deviceId, String(deviceEmployeeNo), cardNo ?? null, enabled ? 1 : 0);
 
-  const jobs = enabled ? queueEmployeeSync(employeeId, deviceId) : [];
+  const employee = db.prepare('SELECT active FROM employees WHERE id=?').get(employeeId) as { active: number } | undefined;
+  const jobs = enabled && employee?.active ? queueEmployeeSync(employeeId, deviceId) : [];
   audit('EMPLOYEE_BIND_DEVICE', 'employee', employeeId, { deviceId, deviceEmployeeNo, cardNo, enabled });
   res.json({ ok: true, syncJobs: jobs });
 });
 
 router.post('/api/employees/:id/sync', (req, res) => {
   try {
-    const targets = countSyncTargets(Number(req.params.id), req.body?.deviceId);
+    const employeeId = Number(req.params.id);
+    const employee = db.prepare('SELECT active FROM employees WHERE id=?').get(employeeId) as { active: number } | undefined;
+    if (!employee) return res.status(404).json({ error: 'employee_not_found' });
+    if (!employee.active) {
+      return res.status(409).json({
+        error: 'employee_inactive',
+        message: 'Servidor desativado: reative o cadastro antes de sincronizar com um REP.'
+      });
+    }
+
+    const targets = countSyncTargets(employeeId, req.body?.deviceId);
     if (targets.eligible === 0 && targets.blocked > 0) {
       return res.status(409).json({
         error: 'sync_blocked_imported',
         message: 'Cadastro importado: a sincronização com o REP está bloqueada para este vínculo.'
       });
     }
-    const jobs = queueEmployeeSync(Number(req.params.id), req.body?.deviceId);
+    const jobs = queueEmployeeSync(employeeId, req.body?.deviceId);
     res.json({ ok: true, jobs });
   } catch (error) {
     res.status(404).json({ error: error instanceof Error ? error.message : 'sync_error' });
