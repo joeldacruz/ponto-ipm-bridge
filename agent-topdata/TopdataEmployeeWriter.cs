@@ -466,7 +466,7 @@ namespace PontoCamara.TopdataAgent
             target.Name = name;
             target.Pis = targetPis;
             target.Card = targetCard;
-            target.DisplayName = name;
+            target.DisplayName = BuildDisplayName(name);
             target.Pin = targetPin;
             target.VerifyBiometrics = existing != null && existing.VerifyBiometrics;
 
@@ -867,6 +867,33 @@ namespace PontoCamara.TopdataAgent
                 value = value.Substring(0, hyphen);
 
             return NormalizeCard(value);
+        }
+
+        private static string BuildDisplayName(string name)
+        {
+            string raw = (name ?? "").Trim();
+            if (raw.Length == 0)
+                throw new InvalidOperationException("NOME_EXIBICAO_VAZIO");
+
+            string[] parts = raw.Split(
+                new char[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            string compact = String.Join(" ", parts);
+
+            const int maxDisplayNameLength = 16;
+
+            if (compact.Length <= maxDisplayNameLength)
+                return compact;
+
+            if (parts.Length >= 2)
+            {
+                string firstLast = parts[0] + " " + parts[parts.Length - 1];
+                if (firstLast.Length <= maxDisplayNameLength)
+                    return firstLast;
+            }
+
+            return compact.Substring(0, maxDisplayNameLength).TrimEnd();
         }
 
         private static string DigitsOnly(string value)
