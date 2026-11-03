@@ -80,6 +80,16 @@
     .panel-h h2 svg{color:var(--brand);font-size:18px}
     .panel-b{padding:20px}
     .count{font-size:12px;font-weight:600;color:var(--muted);background:var(--line-2);padding:2px 9px;border-radius:999px}
+    .employee-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .employee-search{position:relative;display:block}
+    .employee-search input{
+      width:min(360px,72vw);height:36px;margin:0;padding:7px 12px;
+      border:1px solid #cdd6d2;border-radius:9px;background:#fff;
+      color:var(--ink);font:inherit;font-size:13.5px;
+      transition:border-color .15s,box-shadow .15s
+    }
+    .employee-search input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
+    .employee-search input::placeholder{color:#9aa6a1}
 
     /* Alertas */
     #alerts{display:grid;gap:10px;margin-bottom:16px}
@@ -473,7 +483,13 @@
   <section class="panel" id="servidores">
     <div class="panel-h">
       <h2><svg><use href="#i-users"/></svg>Servidores</h2>
-      <span class="count" id="employeesTotal"></span>
+      <div class="employee-tools">
+        <label class="employee-search">
+          <span class="sr">Buscar servidores</span>
+          <input id="employeeSearch" type="search" autocomplete="off" placeholder="Buscar por nome, matrícula, CPF ou PIS/PASEP">
+        </label>
+        <span class="count" id="employeesTotal"></span>
+      </div>
     </div>
     <div class="tw">
       <table class="cards">
@@ -641,6 +657,41 @@ function toast(msg){
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true},3500);
 }
 
+function normalizeEmployeeSearch(value){
+  return String(value??'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .trim();
+}
+
+function filterEmployees(){
+  const input=document.getElementById('employeeSearch');
+  const query=normalizeEmployeeSearch(input?.value);
+  const rows=[...document.querySelectorAll('#employees tr[data-employee-row]')];
+  let visible=0;
+
+  rows.forEach(row=>{
+    const match=!query||normalizeEmployeeSearch(row.dataset.search).includes(query);
+    row.hidden=!match;
+    if(match) visible++;
+  });
+
+  const empty=document.getElementById('employeeSearchEmpty');
+  if(empty) empty.hidden=!query||visible!==0;
+
+  const employees=window._employees||[];
+  const inactiveCount=employees.filter(e=>!e.active).length;
+  const total=employees.length;
+  const totalLabel=total===1?'servidor':'servidores';
+
+  document.getElementById('employeesTotal').textContent=query
+    ? `${visible} de ${total} ${totalLabel}`
+    : total
+      ? `${total} ${totalLabel}${inactiveCount?' · '+inactiveCount+' desativado'+(inactiveCount===1?'':'s'):''}`
+      : '';
+}
+
 let loadInFlight=false;
 async function load(options={}){
   if(loadInFlight) return;
@@ -683,10 +734,6 @@ async function load(options={}){
   document.getElementById('alerts').innerHTML=alerts.join('');
 
   document.getElementById('devicesTotal').textContent=devices.length?`${devices.length} ${devices.length===1?'equipamento':'equipamentos'}`:'';
-  const inactiveCount=employees.filter(e=>!e.active).length;
-  document.getElementById('employeesTotal').textContent=employees.length
-    ? `${employees.length} ${employees.length===1?'servidor':'servidores'}${inactiveCount?' · '+inactiveCount+' desativado'+(inactiveCount===1?'':'s'):''}`
-    : '';
 
   document.getElementById('devices').innerHTML=devices.length?devices.map(d=>`
     <tr class="${d.role==='PRIMARY'?'is-primary':'is-secondary'}">
@@ -749,7 +796,16 @@ async function load(options={}){
         : '<span class="muted">Sem número</span>';
     const whatsappButton=`<button type="button" class="wa-btn ${waState}" onclick="openWhatsappDialog(${Number(e.id)})" title="${waTitle}" aria-label="${waTitle}">${ico('whatsapp')}<span class="wa-chevron">${ico('chevron-down')}</span></button>`;
 
-    return `<tr class="${isActive?'':'employee-inactive'}">
+    const searchIndex=[
+      e.name,
+      e.registration,
+      e.cpf,
+      isActive?'ativo':'desativado',
+      ...bs.map(b=>b.device_employee_no),
+      ...bs.map(b=>b.device_name)
+    ].filter(Boolean).join(' ');
+
+    return `<tr class="${isActive?'':'employee-inactive'}" data-employee-row data-search="${esc(searchIndex)}">
       <td data-label="Matrícula" class="mono">${esc(e.registration||'—')}</td>
       <td data-label="Nome" class="cell-title"><div class="t-name">${esc(e.name)}</div></td>
       <td data-label="CPF" class="mono">${e.cpf?fmtCpf(e.cpf):'—'}</td>
@@ -760,7 +816,8 @@ async function load(options={}){
       <td data-label="Sincronização">${bs.length?'<div class="chips">'+bs.map(b=>`<span title="${esc(b.device_name)}${b.sync_error?': '+esc(b.sync_error):''}">${syncBadge(b.sync_status)}</span>`).join('')+'</div>':'—'}</td>
       <td data-label="Ações"><div class="actions"><button type="button" class="btn ghost sm" onclick="openPinDialog(${Number(e.id)})">PIN</button>${whatsappButton}${syncButton}${activeButton}</div></td>
     </tr>`;
-  }).join(''):'<tr><td colspan="9" class="empty">Nenhum servidor cadastrado.</td></tr>';
+  }).join('')+'<tr id="employeeSearchEmpty" hidden><td colspan="9" class="empty">Nenhum servidor encontrado para esta busca.</td></tr>':'<tr><td colspan="9" class="empty">Nenhum servidor cadastrado.</td></tr>';
+  filterEmployees();
   } finally {
     loadInFlight=false;
     if(!silent){
@@ -1077,6 +1134,8 @@ document.getElementById('deviceChecks').addEventListener('change',()=>{
   if(!pisHint.classList.contains('err')) pisHint.textContent=selected?'Obrigatório para o REP Topdata.':'';
   if(!pinHint.classList.contains('err')) pinHint.textContent=selected?'Pode ser definido agora ou depois, antes do envio ao REP.':'';
 });
+document.getElementById('employeeSearch').addEventListener('input',filterEmployees);
+
 document.getElementById('employeeForm').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
   const status=document.getElementById('formStatus');
