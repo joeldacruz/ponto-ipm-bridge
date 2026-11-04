@@ -150,6 +150,21 @@
     td.empty{text-align:center;color:var(--muted);padding:34px 16px}
     td.num{font-variant-numeric:tabular-nums}
     .actions{display:flex;gap:7px;justify-content:flex-end;align-items:center;flex-wrap:nowrap}
+    #batidas table{min-width:760px}
+    #batidas td:last-child,#batidas th:last-child{text-align:right}
+    .camera-status{display:inline-flex;align-items:center;gap:6px}
+    .camera-status .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+    .camera-status.ok{color:var(--ok)}
+    .camera-status.warn{color:var(--warn)}
+    .camera-status.off{color:var(--muted)}
+    .photo-dialog{border:0;border-radius:14px;padding:0;max-width:920px;width:calc(100% - 32px);box-shadow:0 18px 60px rgba(0,0,0,.28)}
+    .photo-dialog::backdrop{background:rgba(20,33,43,.62)}
+    .photo-dialog .box{padding:18px}
+    .photo-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .photo-dialog h3{margin:0;font-size:18px}
+    .photo-dialog p{margin:3px 0 0;color:var(--muted);font-size:13px}
+    .photo-dialog img{display:block;width:100%;max-height:68vh;object-fit:contain;background:#0f171c;border-radius:10px}
+    .photo-dialog .row{display:flex;justify-content:flex-end;margin-top:12px}
     .wa-btn{
       display:inline-flex;align-items:center;justify-content:center;gap:4px;
       min-width:42px;height:31px;padding:0 8px;border-radius:8px;
@@ -326,6 +341,7 @@
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.500 6v5.500c0 4.500 3 8 7.500 9.500 4.500-1.500 7.500-5 7.500-9.500V6L12 3Z"/><path d="m9 12 2.200 2.200L15.500 10"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16"/></symbol>
     <symbol id="i-message" viewBox="0 0 24 24"><path d="M4 5.5h16v11H9l-5 4v-15Z"/><path d="M8 10h8M8 13h5"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 7.5h4l1.5-2h5l1.5 2h4v11H4v-11Z"/><circle cx="12" cy="13" r="3.5"/></symbol>
     <symbol id="i-whatsapp" viewBox="0 0 24 24"><path d="M20.2 11.7a8.3 8.3 0 0 1-12.3 7.2L3.8 20.2l1.3-4A8.3 8.3 0 1 1 20.2 11.7Z"/><path d="M8.4 7.6c.2-.2.4-.3.7-.3h.3c.2 0 .4.1.5.4l.9 2c.1.2.1.4-.1.6l-.7.9c-.1.2-.1.4 0 .6.7 1.2 1.7 2.2 3 2.7.2.1.4.1.6-.1l.9-1.1c.2-.2.4-.3.7-.2l2 .9c.3.1.4.3.4.6 0 .6-.3 1.5-.9 2-.5.5-1.4.8-2.2.8-1.4 0-3.5-.8-5.5-2.6-2.3-2.1-3.4-4.6-3.4-5.8 0-.6.3-1.1.7-1.4Z"/></symbol>
     <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
   </defs>
@@ -359,6 +375,7 @@
   <div class="in">
     <a href="#painel" class="on"><svg><use href="#i-grid"/></svg>Painel</a>
     <a href="#equipamentos"><svg><use href="#i-device"/></svg>Equipamentos</a>
+    <a href="#batidas"><svg><use href="#i-camera"/></svg>Batidas</a>
     <a href="#exportacoes"><svg><use href="#i-download"/></svg>Exportações</a>
     <a href="#novo-servidor"><svg><use href="#i-plus"/></svg>Novo servidor</a>
     <a href="#servidores"><svg><use href="#i-users"/></svg>Servidores</a>
@@ -406,6 +423,19 @@
       <table class="cards">
         <thead><tr><th>Função</th><th>Equipamento</th><th>Fabricante</th><th>Endereço IP</th><th>Status</th><th>Último NSR</th><th>Batidas</th><th>Última comunicação</th></tr></thead>
         <tbody id="devices"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="batidas">
+    <div class="panel-h">
+      <h2><svg><use href="#i-camera"/></svg>Últimas batidas</h2>
+      <span class="count camera-status off" id="cameraStatus"><span class="dot"></span>Câmera desativada</span>
+    </div>
+    <div class="tw">
+      <table class="cards">
+        <thead><tr><th>Data/hora</th><th>Servidor</th><th>Matrícula</th><th>REP</th><th>NSR</th><th>Foto</th></tr></thead>
+        <tbody id="attendanceRecent"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -546,6 +576,22 @@
   </form>
 </dialog>
 
+<dialog id="photoDialog" class="photo-dialog" aria-labelledby="photoDialogTitle">
+  <div class="box">
+    <div class="photo-dialog-head">
+      <div>
+        <h3 id="photoDialogTitle">Foto da batida</h3>
+        <p id="photoDialogMeta"></p>
+      </div>
+      <button type="button" class="btn ghost sm" onclick="closeAttendancePhoto()">Fechar</button>
+    </div>
+    <img id="attendancePhoto" alt="Foto registrada no momento da batida">
+    <div class="row">
+      <button type="button" class="btn ghost" onclick="closeAttendancePhoto()">Fechar</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="repConfirmDialog" class="pin-dialog rep-confirm-dialog" aria-labelledby="repConfirmTitle">
   <div class="box">
     <div class="rep-confirm-head">
@@ -632,6 +678,11 @@ function fmtTs(s){
   const rel=diff<1?'agora':diff<60?`há ${diff} min`:diff<1440?`há ${Math.floor(diff/60)} h`:`há ${Math.floor(diff/1440)} d`;
   return `${d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}<div class="t-sub">${rel}</div>`;
 }
+function fmtOccurrence(value){
+  const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(value||''));
+  if(!m) return esc(value||'—');
+  return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+}
 function fmtCpf(v){
   const d=String(v??'').replace(/\D/g,'');
   return d.length===11?d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'):esc(v);
@@ -705,10 +756,11 @@ async function load(options={}){
   }
 
   try{
-  const [health,devices,employees]=await Promise.all([
+  const [health,devices,employees,recentAttendance]=await Promise.all([
     fetch('/health').then(r=>r.json()),
     fetch('/api/devices').then(r=>r.json()),
-    fetch('/api/employees').then(r=>r.json())
+    fetch('/api/employees').then(r=>r.json()),
+    fetch('/api/attendance/recent?limit=20').then(r=>r.json())
   ]);
   const total=health.devices?.total??devices.length;
   const online=health.devices?.online??devices.filter(d=>d.status==='ONLINE').length;
@@ -746,6 +798,33 @@ async function load(options={}){
       <td data-label="Batidas" class="num">${num(d.attendance_count)}</td>
       <td data-label="Última comunicação">${fmtTs(d.last_seen_at)}</td>
     </tr>`).join(''):'<tr><td colspan="8" class="empty">Nenhum REP cadastrado.</td></tr>';
+
+  const camera=health.camera||{};
+  const cameraStatus=document.getElementById('cameraStatus');
+  if(camera.enabled && camera.ready){
+    cameraStatus.className='count camera-status ok';
+    cameraStatus.innerHTML='<span class="dot"></span>Câmera online';
+  }else if(camera.enabled){
+    cameraStatus.className='count camera-status warn';
+    cameraStatus.innerHTML='<span class="dot"></span>Câmera conectando';
+  }else{
+    cameraStatus.className='count camera-status off';
+    cameraStatus.innerHTML='<span class="dot"></span>Câmera desativada';
+  }
+
+  document.getElementById('attendanceRecent').innerHTML=Array.isArray(recentAttendance)&&recentAttendance.length
+    ? recentAttendance.map(a=>`
+      <tr>
+        <td data-label="Data/hora" class="mono">${fmtOccurrence(a.occurred_at)}</td>
+        <td data-label="Servidor" class="cell-title"><div class="t-name">${esc(a.name||'Não identificado')}</div></td>
+        <td data-label="Matrícula" class="mono">${esc(a.registration||'—')}</td>
+        <td data-label="REP">${esc(a.device_name||'—')}</td>
+        <td data-label="NSR" class="mono">${esc(a.nsr??'—')}</td>
+        <td data-label="Foto">${a.photo_available
+          ? `<button type="button" class="btn ghost sm" onclick="openAttendancePhoto(${Number(a.id)},'${esc(String(a.name||'Servidor')).replace(/'/g,'&#39;')} · ${esc(fmtOccurrence(a.occurred_at)).replace(/'/g,'&#39;')}')">${ico('camera')}Ver foto</button>`
+          : '<span class="muted">Sem foto</span>'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" class="empty">Nenhuma batida coletada.</td></tr>';
 
   document.getElementById('deviceChecks').innerHTML=devices.filter(d=>d.active).map(d=>`
     <label class="check"><input type="checkbox" name="deviceId" value="${esc(d.id)}" data-vendor="${esc(String(d.vendor||'').toUpperCase())}">
@@ -826,6 +905,30 @@ async function load(options={}){
     }
   }
 }
+
+function openAttendancePhoto(id,meta){
+  const dialog=document.getElementById('photoDialog');
+  const image=document.getElementById('attendancePhoto');
+  document.getElementById('photoDialogMeta').textContent=meta||'';
+  image.src=`/api/attendance/${Number(id)}/photo?v=${Date.now()}`;
+  image.onerror=()=>{
+    image.removeAttribute('src');
+    toast('Não foi possível carregar a foto desta batida.');
+    if(dialog.open) dialog.close();
+  };
+  dialog.showModal();
+}
+
+function closeAttendancePhoto(){
+  const dialog=document.getElementById('photoDialog');
+  document.getElementById('attendancePhoto').removeAttribute('src');
+  if(dialog.open) dialog.close();
+}
+
+document.getElementById('photoDialog').addEventListener('cancel',ev=>{
+  ev.preventDefault();
+  closeAttendancePhoto();
+});
 
 async function downloadAttendance(format,btn){
   const scope=document.getElementById('exportScope').value;
