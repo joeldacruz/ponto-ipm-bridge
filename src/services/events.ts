@@ -1,6 +1,7 @@
 import { db } from '../storage/db.js';
 import type { DeviceEvent } from '../core/types.js';
 import { employeeNoMatchSql } from '../core/employeeMatch.js';
+import { captureAttendancePhoto } from './camera.js';
 
 const insertEvent = db.prepare(`
 INSERT OR IGNORE INTO device_events
@@ -35,6 +36,12 @@ const insertAttendanceNotification = db.prepare(`
     event_id, employee_id, destination, message
   )
   VALUES(?,?,?,?)
+`);
+
+const updateAttendancePhoto = db.prepare(`
+  UPDATE device_events
+  SET photo_path=?, photo_captured_at=?, photo_frame_at=?
+  WHERE id=? AND kind='ATTENDANCE'
 `);
 
 function formatOccurrence(value: string): string {
@@ -79,6 +86,22 @@ export function saveEvents(events: DeviceEvent[]): number {
 
       if (result.changes === 1 && event.kind === 'ATTENDANCE') {
         const eventId = Number(result.lastInsertRowid);
+
+        try {
+          const photo = captureAttendancePhoto(eventId, event);
+          if (photo) {
+            updateAttendancePhoto.run(
+              photo.relativePath,
+              photo.capturedAt,
+              photo.frameAt,
+              eventId
+            );
+          }
+        } catch {
+          // Falha de câmera nunca invalida nem atrasa o registro oficial da batida.
+          console.error('Camera de ponto: falha ao salvar foto da batida.');
+        }
+
         const target = attendanceNotificationTarget.get(eventId) as
           | {
               employee_id: number;
@@ -130,4 +153,31 @@ export function listAttendance(period?: string) {
     ORDER BY e.occurred_at DESC
     LIMIT 500
   `).all();
+}
+
+
+export function listRecentAttendance(limit = 20) {
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit) || 20));
+
+  return db.prepare(`
+    SELECT
+      e.id,
+      e.occurred_at,
+      e.nsr,
+      e.employee_no,
+      e.photo_path IS NOT NULL AS photo_available,
+      e.photo_captured_at,
+      emp.name,
+      emp.registration,
+      d.name AS device_name
+    FROM device_events e
+    LEFT JOIN employee_device_bindings b
+      ON b.device_id=e.device_id
+     AND ${employeeNoMatchSql('b', 'e')}
+    LEFT JOIN employees emp ON emp.id=b.employee_id
+    LEFT JOIN devices d ON d.id=e.device_id
+    WHERE e.kind='ATTENDANCE'
+    ORDER BY e.id DESC
+    LIMIT ?
+  `).all(safeLimit);
 }
