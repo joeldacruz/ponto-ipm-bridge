@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { db } from '../storage/db.js';
-import { listAttendance, saveEvents } from '../services/events.js';
+import { listAttendance, listRecentAttendance, saveEvents } from '../services/events.js';
 import {
   buildAttendanceAfdDownload,
   buildAttendanceAfdDailyDownload,
@@ -11,6 +11,8 @@ import {
 import { isWhatsappGatewayConfigured, normalizeWhatsappNumber } from '../services/whatsapp.js';
 import { completeJob, countSyncTargets, leaseJobs, queueEmployeeSync } from '../services/sync.js';
 import type { DeviceEvent } from '../core/types.js';
+import fs from 'node:fs';
+import { getAttendanceCameraStatus, resolveAttendancePhotoPath } from '../services/camera.js';
 import { encryptPin, isValidPin } from '../security/pin.js';
 import {
   authenticateUser,
@@ -191,7 +193,7 @@ router.get('/health', (_req, res) => {
   `).get();
   const employees = db.prepare('SELECT COUNT(*) AS total FROM employees WHERE active=1').get();
   const attendance = db.prepare("SELECT COUNT(*) AS total FROM device_events WHERE kind='ATTENDANCE'").get();
-  res.json({ ok: true, devices, employees, attendance });
+  res.json({ ok: true, devices, employees, attendance, camera: getAttendanceCameraStatus() });
 });
 
 // Portal humano: todas as APIs, exceto o agente, exigem sessão autenticada.
@@ -199,6 +201,37 @@ router.use((req, res, next) => {
   if (req.path.startsWith('/api/agent/')) return next();
   if (req.path.startsWith('/api/')) return requireApiSession(req, res, next);
   next();
+});
+
+router.get('/api/attendance/recent', (req, res) => {
+  const limit = Number(req.query.limit || 20);
+  res.json(listRecentAttendance(limit));
+});
+
+router.get('/api/attendance/:id/photo', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'attendance_id_invalid' });
+  }
+
+  const row = db.prepare(`
+    SELECT photo_path
+    FROM device_events
+    WHERE id=? AND kind='ATTENDANCE'
+  `).get(id) as { photo_path?: string | null } | undefined;
+
+  if (!row?.photo_path) {
+    return res.status(404).json({ error: 'attendance_photo_not_found' });
+  }
+
+  const absolutePath = resolveAttendancePhotoPath(row.photo_path);
+  if (!absolutePath || !fs.existsSync(absolutePath)) {
+    return res.status(404).json({ error: 'attendance_photo_not_found' });
+  }
+
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.type('image/jpeg');
+  res.sendFile(absolutePath);
 });
 
 router.get('/api/devices', (_req, res) => {
