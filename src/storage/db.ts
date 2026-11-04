@@ -197,6 +197,9 @@ ensureColumn('employees', 'pin_tag', 'TEXT');
 ensureColumn('employees', 'pin_updated_at', 'TEXT');
 ensureColumn('employees', 'whatsapp_number', 'TEXT');
 ensureColumn('employees', 'whatsapp_attendance_enabled', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('device_events', 'photo_path', 'TEXT');
+ensureColumn('device_events', 'photo_captured_at', 'TEXT');
+ensureColumn('device_events', 'photo_frame_at', 'TEXT');
 
 
 db.prepare(`
