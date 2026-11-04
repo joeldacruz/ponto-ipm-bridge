@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceEvent } from '../core/types.js';
@@ -33,9 +33,10 @@ const captureOffsetMs = boundedNumber(process.env.ATTENDANCE_CAMERA_CAPTURE_OFFS
 const eventMaxAgeSeconds = boundedNumber(process.env.ATTENDANCE_CAMERA_EVENT_MAX_AGE_SECONDS, 90, 10, 600);
 const retentionDays = boundedNumber(process.env.ATTENDANCE_PHOTO_RETENTION_DAYS, 90, 1, 3650);
 const photoRoot = path.resolve(process.env.ATTENDANCE_PHOTO_DIR || './data/attendance-photos');
+const attendanceTimeZone = String(process.env.ATTENDANCE_TIMEZONE || 'America/Sao_Paulo').trim();
 
 let frames: BufferedFrame[] = [];
-let ffmpeg: ChildProcessWithoutNullStreams | null = null;
+let ffmpeg: ChildProcess | null = null;
 let restartTimer: NodeJS.Timeout | null = null;
 let retentionTimer: NodeJS.Timeout | null = null;
 let stopping = false;
@@ -87,7 +88,7 @@ function startFfmpeg(): void {
   const startMarker = Buffer.from([0xff, 0xd8]);
   const endMarker = Buffer.from([0xff, 0xd9]);
 
-  child.stdout.on('data', (chunk: Buffer) => {
+  child.stdout?.on('data', (chunk: Buffer) => {
     pending = Buffer.concat([pending, chunk]);
 
     while (pending.length > 0) {
@@ -112,7 +113,7 @@ function startFfmpeg(): void {
 
   // Consome stderr para impedir bloqueio do processo. Não registramos o texto,
   // pois mensagens do ffmpeg podem repetir a URL RTSP com credenciais.
-  child.stderr.on('data', () => {});
+  child.stderr?.on('data', () => {});
 
   child.on('error', () => {
     console.error('Camera de ponto: nao foi possivel iniciar o ffmpeg.');
@@ -197,10 +198,53 @@ export function stopAttendanceCamera(): void {
   frames = [];
 }
 
+function wallClockMs(value: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!match) return null;
+
+  return Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6] || 0)
+  );
+}
+
+function currentWallClockMs(): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: attendanceTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+
+  return Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second)
+  );
+}
+
 function eventIsRecent(event: DeviceEvent): boolean {
-  const occurredAt = new Date(event.occurredAt);
-  if (Number.isNaN(occurredAt.getTime())) return false;
-  const age = Date.now() - occurredAt.getTime();
+  const occurredAt = wallClockMs(event.occurredAt);
+  if (occurredAt == null) return false;
+
+  const age = currentWallClockMs() - occurredAt;
   return age >= -30_000 && age <= eventMaxAgeSeconds * 1000;
 }
 
