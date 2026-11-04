@@ -812,6 +812,7 @@ async function load(options={}){
     cameraStatus.innerHTML='<span class="dot"></span>Câmera desativada';
   }
 
+  window._recentAttendance=Array.isArray(recentAttendance)?recentAttendance:[];
   document.getElementById('attendanceRecent').innerHTML=Array.isArray(recentAttendance)&&recentAttendance.length
     ? recentAttendance.map(a=>`
       <tr>
@@ -821,7 +822,7 @@ async function load(options={}){
         <td data-label="REP">${esc(a.device_name||'—')}</td>
         <td data-label="NSR" class="mono">${esc(a.nsr??'—')}</td>
         <td data-label="Foto">${a.photo_available
-          ? `<button type="button" class="btn ghost sm" onclick="openAttendancePhoto(${Number(a.id)},'${esc(String(a.name||'Servidor')).replace(/'/g,'&#39;')} · ${esc(fmtOccurrence(a.occurred_at)).replace(/'/g,'&#39;')}')">${ico('camera')}Ver foto</button>`
+          ? `<button type="button" class="btn ghost sm" onclick="openAttendancePhoto(${Number(a.id)})">${ico('camera')}Ver foto</button>`
           : '<span class="muted">Sem foto</span>'}</td>
       </tr>`).join('')
     : '<tr><td colspan="6" class="empty">Nenhuma batida coletada.</td></tr>';
@@ -906,10 +907,14 @@ async function load(options={}){
   }
 }
 
-function openAttendancePhoto(id,meta){
+function openAttendancePhoto(id){
   const dialog=document.getElementById('photoDialog');
   const image=document.getElementById('attendancePhoto');
-  document.getElementById('photoDialogMeta').textContent=meta||'';
+  const item=(window._recentAttendance||[]).find(x=>Number(x.id)===Number(id));
+  const meta=item
+    ? `${item.name||'Servidor'} · ${fmtOccurrence(item.occurred_at)} · NSR ${item.nsr??'—'}`
+    : '';
+  document.getElementById('photoDialogMeta').textContent=meta;
   image.src=`/api/attendance/${Number(id)}/photo?v=${Date.now()}`;
   image.onerror=()=>{
     image.removeAttribute('src');
