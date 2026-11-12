@@ -9,6 +9,7 @@ import {
   scorePresenceDifference,
   type RawRgbaImage
 } from './cameraPresence.js';
+import { eventEpochFromWallClock, wallClockMs } from './cameraTiming.js';
 
 type BufferedFrame = {
   capturedAt: number;
@@ -47,6 +48,22 @@ function boundedNumberList(
   return [...new Set(values)].slice(0, 6);
 }
 
+function boundedSignedNumberList(
+  value: string | undefined,
+  fallback: number[],
+  min: number,
+  max: number
+): number[] {
+  const parsed = String(value || '')
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.min(max, Math.max(min, item)));
+
+  const values = parsed.length ? parsed : fallback;
+  return [...new Set(values)].slice(0, 8);
+}
+
 const enabled = envEnabled(process.env.ATTENDANCE_CAMERA_ENABLED);
 const rtspUrl = String(process.env.ATTENDANCE_CAMERA_RTSP_URL || '').trim();
 const cameraDeviceId = String(process.env.ATTENDANCE_CAMERA_DEVICE_ID || 'rep-topdata-02').trim();
@@ -70,6 +87,24 @@ const referenceOffsetMs = boundedNumber(
   12000,
   1000,
   Math.max(1000, bufferSeconds * 1000)
+);
+const eventCandidateDeltasMs = boundedSignedNumberList(
+  process.env.ATTENDANCE_CAMERA_EVENT_CANDIDATE_DELTAS_MS,
+  [-1500, -500, 0, 500],
+  -5000,
+  5000
+);
+const eventReferenceDeltaMs = boundedNumber(
+  process.env.ATTENDANCE_CAMERA_EVENT_REFERENCE_BEFORE_MS,
+  7000,
+  1000,
+  Math.max(1000, bufferSeconds * 1000)
+);
+const eventFrameMaxDistanceMs = boundedNumber(
+  process.env.ATTENDANCE_CAMERA_EVENT_FRAME_MAX_DISTANCE_MS,
+  Math.max(1000, Math.ceil(1500 / cameraFps)),
+  250,
+  3000
 );
 const presenceMinimumDifference = boundedNumber(
   process.env.ATTENDANCE_CAMERA_PRESENCE_MIN_DIFFERENCE,
@@ -246,20 +281,6 @@ export function stopAttendanceCamera(): void {
   frames = [];
 }
 
-function wallClockMs(value: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
-  if (!match) return null;
-
-  return Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-    Number(match[6] || 0)
-  );
-}
-
 function currentWallClockMs(): number {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: attendanceTimeZone,
@@ -296,7 +317,7 @@ function eventIsRecent(event: DeviceEvent): boolean {
   return age >= -30_000 && age <= eventMaxAgeSeconds * 1000;
 }
 
-function selectBufferedFrame(targetMs: number): BufferedFrame | null {
+function selectBufferedFrame(targetMs: number, maxDistanceMs?: number): BufferedFrame | null {
   if (!frames.length) return null;
 
   let best = frames[0];
@@ -312,6 +333,7 @@ function selectBufferedFrame(targetMs: number): BufferedFrame | null {
   }
 
   if (Date.now() - best.capturedAt > (bufferSeconds * 1000) + 5000) return null;
+  if (maxDistanceMs != null && bestDistance > maxDistanceMs) return null;
   return best;
 }
 
@@ -329,7 +351,7 @@ function decodeBufferedFrame(frame: BufferedFrame): RawRgbaImage | null {
   }
 }
 
-function candidateFrames(nowMs: number): BufferedFrame[] {
+function receivedTimeCandidateFrames(nowMs: number): BufferedFrame[] {
   const unique = new Map<number, BufferedFrame>();
 
   for (const offsetMs of captureCandidateOffsetsMs) {
@@ -340,19 +362,17 @@ function candidateFrames(nowMs: number): BufferedFrame[] {
   return [...unique.values()];
 }
 
-function selectAttendanceFrame(nowMs: number): BufferedFrame | null {
-  const preferred = selectBufferedFrame(nowMs - captureOffsetMs);
-  if (!preferred || !presenceSelectionEnabled) return preferred;
-
-  const reference = selectBufferedFrame(nowMs - referenceOffsetMs);
-  const candidates = candidateFrames(nowMs);
-
-  if (!reference || candidates.length < 2) return preferred;
+function selectByPresence(
+  preferred: BufferedFrame,
+  reference: BufferedFrame | null,
+  candidates: BufferedFrame[],
+  preferredTargetMs: number
+): BufferedFrame {
+  if (!presenceSelectionEnabled || !reference || candidates.length < 2) return preferred;
 
   const referenceImage = decodeBufferedFrame(reference);
   if (!referenceImage) return preferred;
 
-  const preferredTargetMs = nowMs - captureOffsetMs;
   const scored = candidates.map((candidate) => {
     const candidateImage = decodeBufferedFrame(candidate);
     return {
@@ -365,6 +385,63 @@ function selectAttendanceFrame(nowMs: number): BufferedFrame | null {
   });
 
   return chooseBestPresenceCandidate(scored, presenceMinimumDifference) ?? preferred;
+}
+
+function selectAttendanceFrameByReceivedTime(nowMs: number): BufferedFrame | null {
+  const preferredTargetMs = nowMs - captureOffsetMs;
+  const preferred = selectBufferedFrame(preferredTargetMs);
+  if (!preferred) return null;
+
+  return selectByPresence(
+    preferred,
+    selectBufferedFrame(nowMs - referenceOffsetMs),
+    receivedTimeCandidateFrames(nowMs),
+    preferredTargetMs
+  );
+}
+
+function eventTimeCandidateFrames(eventEpochMs: number): BufferedFrame[] {
+  const unique = new Map<number, BufferedFrame>();
+
+  for (const deltaMs of eventCandidateDeltasMs) {
+    const frame = selectBufferedFrame(
+      eventEpochMs + deltaMs,
+      eventFrameMaxDistanceMs
+    );
+    if (frame) unique.set(frame.capturedAt, frame);
+  }
+
+  return [...unique.values()];
+}
+
+function selectAttendanceFrame(event: DeviceEvent, nowMs: number): BufferedFrame | null {
+  const eventEpochMs = eventEpochFromWallClock(
+    event.occurredAt,
+    nowMs,
+    currentWallClockMs()
+  );
+
+  if (eventEpochMs != null) {
+    const preferredTargetMs = eventEpochMs - 500;
+    const preferred = selectBufferedFrame(
+      preferredTargetMs,
+      eventFrameMaxDistanceMs
+    );
+
+    if (preferred) {
+      return selectByPresence(
+        preferred,
+        selectBufferedFrame(
+          eventEpochMs - eventReferenceDeltaMs,
+          eventFrameMaxDistanceMs
+        ),
+        eventTimeCandidateFrames(eventEpochMs),
+        preferredTargetMs
+      );
+    }
+  }
+
+  return selectAttendanceFrameByReceivedTime(nowMs);
 }
 
 function eventPhotoRelativePath(eventId: number, event: DeviceEvent): string {
@@ -383,7 +460,7 @@ export function captureAttendancePhoto(
   if (event.deviceId !== cameraDeviceId) return null;
   if (!eventIsRecent(event)) return null;
 
-  const frame = selectAttendanceFrame(Date.now());
+  const frame = selectAttendanceFrame(event, Date.now());
   if (!frame) return null;
 
   const relativePath = eventPhotoRelativePath(eventId, event);
@@ -428,6 +505,9 @@ export function getAttendanceCameraStatus() {
     captureOffsetMs,
     candidateOffsetsMs: captureCandidateOffsetsMs,
     referenceOffsetMs,
+    eventCandidateDeltasMs,
+    eventReferenceBeforeMs: eventReferenceDeltaMs,
+    eventFrameMaxDistanceMs,
     presenceMinimumDifference,
     presenceRoi
   };
