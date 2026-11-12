@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   minutePrecisionAgeWindow,
+  minutePrecisionEventIsRecent,
   wallClockMs
 } from '../src/services/cameraTiming.js';
 
@@ -52,4 +53,30 @@ test('minutePrecisionAgeWindow respeita o limite real do buffer', () => {
 
 test('wallClockMs rejeita valor invalido', () => {
   assert.equal(wallClockMs('invalido'), null);
+});
+
+test('minutePrecisionEventIsRecent aceita evento valido no fim do minuto', () => {
+  const current = Date.UTC(2026, 10, 12, 10, 14, 31);
+
+  assert.equal(
+    minutePrecisionEventIsRecent(
+      '2026-11-12T10:13:00',
+      current,
+      90_000
+    ),
+    true
+  );
+});
+
+test('minutePrecisionEventIsRecent rejeita minuto realmente antigo', () => {
+  const current = Date.UTC(2026, 10, 12, 10, 15, 31);
+
+  assert.equal(
+    minutePrecisionEventIsRecent(
+      '2026-11-12T10:13:00',
+      current,
+      90_000
+    ),
+    false
+  );
 });
