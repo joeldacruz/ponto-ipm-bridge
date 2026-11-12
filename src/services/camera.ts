@@ -1,7 +1,14 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import jpeg from 'jpeg-js';
 import type { DeviceEvent } from '../core/types.js';
+import {
+  chooseBestPresenceCandidate,
+  parsePresenceRoi,
+  scorePresenceDifference,
+  type RawRgbaImage
+} from './cameraPresence.js';
 
 type BufferedFrame = {
   capturedAt: number;
@@ -24,12 +31,53 @@ function boundedNumber(value: string | undefined, fallback: number, min: number,
   return Math.min(max, Math.max(min, parsed));
 }
 
+function boundedNumberList(
+  value: string | undefined,
+  fallback: number[],
+  min: number,
+  max: number
+): number[] {
+  const parsed = String(value || '')
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.min(max, Math.max(min, item)));
+
+  const values = parsed.length ? parsed : fallback;
+  return [...new Set(values)].slice(0, 6);
+}
+
 const enabled = envEnabled(process.env.ATTENDANCE_CAMERA_ENABLED);
 const rtspUrl = String(process.env.ATTENDANCE_CAMERA_RTSP_URL || '').trim();
 const cameraDeviceId = String(process.env.ATTENDANCE_CAMERA_DEVICE_ID || 'rep-topdata-02').trim();
 const cameraFps = boundedNumber(process.env.ATTENDANCE_CAMERA_BUFFER_FPS, 2, 1, 5);
 const bufferSeconds = boundedNumber(process.env.ATTENDANCE_CAMERA_BUFFER_SECONDS, 20, 5, 120);
 const captureOffsetMs = boundedNumber(process.env.ATTENDANCE_CAMERA_CAPTURE_OFFSET_MS, 2500, 0, 15000);
+const presenceSelectionEnabled = envEnabled(
+  process.env.ATTENDANCE_CAMERA_PRESENCE_SELECTION_ENABLED ?? '1'
+);
+const captureCandidateOffsetsMs = boundedNumberList(
+  process.env.ATTENDANCE_CAMERA_CANDIDATE_OFFSETS_MS,
+  [captureOffsetMs, 1200, 0],
+  0,
+  15000
+);
+if (!captureCandidateOffsetsMs.includes(captureOffsetMs)) {
+  captureCandidateOffsetsMs.unshift(captureOffsetMs);
+}
+const referenceOffsetMs = boundedNumber(
+  process.env.ATTENDANCE_CAMERA_REFERENCE_OFFSET_MS,
+  12000,
+  1000,
+  Math.max(1000, bufferSeconds * 1000)
+);
+const presenceMinimumDifference = boundedNumber(
+  process.env.ATTENDANCE_CAMERA_PRESENCE_MIN_DIFFERENCE,
+  0.012,
+  0,
+  1
+);
+const presenceRoi = parsePresenceRoi(process.env.ATTENDANCE_CAMERA_PRESENCE_ROI);
 const eventMaxAgeSeconds = boundedNumber(process.env.ATTENDANCE_CAMERA_EVENT_MAX_AGE_SECONDS, 90, 10, 600);
 const retentionDays = boundedNumber(process.env.ATTENDANCE_PHOTO_RETENTION_DAYS, 90, 1, 3650);
 const photoRoot = path.resolve(process.env.ATTENDANCE_PHOTO_DIR || './data/attendance-photos');
@@ -267,6 +315,58 @@ function selectBufferedFrame(targetMs: number): BufferedFrame | null {
   return best;
 }
 
+function decodeBufferedFrame(frame: BufferedFrame): RawRgbaImage | null {
+  try {
+    return jpeg.decode(frame.data, {
+      useTArray: true,
+      formatAsRGBA: true,
+      tolerantDecoding: true,
+      maxResolutionInMP: 5,
+      maxMemoryUsageInMB: 64
+    });
+  } catch {
+    return null;
+  }
+}
+
+function candidateFrames(nowMs: number): BufferedFrame[] {
+  const unique = new Map<number, BufferedFrame>();
+
+  for (const offsetMs of captureCandidateOffsetsMs) {
+    const frame = selectBufferedFrame(nowMs - offsetMs);
+    if (frame) unique.set(frame.capturedAt, frame);
+  }
+
+  return [...unique.values()];
+}
+
+function selectAttendanceFrame(nowMs: number): BufferedFrame | null {
+  const preferred = selectBufferedFrame(nowMs - captureOffsetMs);
+  if (!preferred || !presenceSelectionEnabled) return preferred;
+
+  const reference = selectBufferedFrame(nowMs - referenceOffsetMs);
+  const candidates = candidateFrames(nowMs);
+
+  if (!reference || candidates.length < 2) return preferred;
+
+  const referenceImage = decodeBufferedFrame(reference);
+  if (!referenceImage) return preferred;
+
+  const preferredTargetMs = nowMs - captureOffsetMs;
+  const scored = candidates.map((candidate) => {
+    const candidateImage = decodeBufferedFrame(candidate);
+    return {
+      value: candidate,
+      score: candidateImage == null
+        ? null
+        : scorePresenceDifference(referenceImage, candidateImage, presenceRoi),
+      distanceFromPreferredMs: Math.abs(candidate.capturedAt - preferredTargetMs)
+    };
+  });
+
+  return chooseBestPresenceCandidate(scored, presenceMinimumDifference) ?? preferred;
+}
+
 function eventPhotoRelativePath(eventId: number, event: DeviceEvent): string {
   const date = /^\d{4}-\d{2}-\d{2}/.exec(event.occurredAt)?.[0] || new Date().toISOString().slice(0, 10);
   const [year, month, day] = date.split('-');
@@ -283,7 +383,7 @@ export function captureAttendancePhoto(
   if (event.deviceId !== cameraDeviceId) return null;
   if (!eventIsRecent(event)) return null;
 
-  const frame = selectBufferedFrame(Date.now() - captureOffsetMs);
+  const frame = selectAttendanceFrame(Date.now());
   if (!frame) return null;
 
   const relativePath = eventPhotoRelativePath(eventId, event);
@@ -323,6 +423,12 @@ export function getAttendanceCameraStatus() {
     deviceId: cameraDeviceId,
     bufferedFrames: frames.length,
     lastFrameAt: lastFrameAt == null ? null : new Date(lastFrameAt).toISOString(),
-    streamStartedAt: streamStartedAt == null ? null : new Date(streamStartedAt).toISOString()
+    streamStartedAt: streamStartedAt == null ? null : new Date(streamStartedAt).toISOString(),
+    selectionMode: presenceSelectionEnabled ? 'presence-roi' : 'fixed-offset',
+    captureOffsetMs,
+    candidateOffsetsMs: captureCandidateOffsetsMs,
+    referenceOffsetMs,
+    presenceMinimumDifference,
+    presenceRoi
   };
 }
