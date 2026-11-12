@@ -59,7 +59,10 @@ export function minutePrecisionEventIsRecent(
 
   const minuteEnd = minuteStart + 59_999;
   const earliestPossibleAgeMs = currentWallClockEpochMs - minuteEnd;
+  const latestPossibleAgeMs = currentWallClockEpochMs - minuteStart;
 
-  return earliestPossibleAgeMs >= -30_000
+  // O AFD informa apenas o minuto. Consideramos recente quando a faixa de
+  // instantes possiveis daquele minuto intersecta a janela permitida.
+  return latestPossibleAgeMs >= -30_000
     && earliestPossibleAgeMs <= maxAgeMs;
 }
