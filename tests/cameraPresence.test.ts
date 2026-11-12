@@ -55,6 +55,16 @@ test('scorePresenceDifference considera somente a ROI configurada', () => {
   assert.ok(insideScore != null && insideScore > 0.1);
 });
 
+test('scorePresenceDifference ignora mudanca uniforme de iluminacao', () => {
+  const reference = solidImage(100, 100, 80);
+  const brighter = solidImage(100, 100, 130);
+  const roi = { x: 0, y: 0, width: 1, height: 1 };
+
+  const score = scorePresenceDifference(reference, brighter, roi);
+
+  assert.equal(score, 0);
+});
+
 test('chooseBestPresenceCandidate escolhe maior presença e desempata pelo fallback', () => {
   const best = chooseBestPresenceCandidate([
     { value: '2500', score: 0.03, distanceFromPreferredMs: 0 },
