@@ -501,7 +501,7 @@ export function getAttendanceCameraStatus() {
     bufferedFrames: frames.length,
     lastFrameAt: lastFrameAt == null ? null : new Date(lastFrameAt).toISOString(),
     streamStartedAt: streamStartedAt == null ? null : new Date(streamStartedAt).toISOString(),
-    selectionMode: presenceSelectionEnabled ? 'presence-roi' : 'fixed-offset',
+    selectionMode: presenceSelectionEnabled ? 'event-time-presence-roi' : 'event-time-fixed',
     captureOffsetMs,
     candidateOffsetsMs: captureCandidateOffsetsMs,
     referenceOffsetMs,
