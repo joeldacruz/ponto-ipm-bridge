@@ -436,12 +436,14 @@ function selectAttendanceFrame(event: DeviceEvent, nowMs: number): BufferedFrame
   const preMinuteReferenceAgeMs = window.maxAgeMs + minuteBackgroundGapMs;
   const maxReferenceDistanceMs = Math.max(1000, Math.ceil(1500 / cameraFps));
 
-  const reference =
-    selectBufferedFrame(
-      nowMs - preMinuteReferenceAgeMs,
-      maxReferenceDistanceMs
-    )
-    ?? selectBufferedFrame(nowMs, maxReferenceDistanceMs);
+  const reference = selectBufferedFrame(
+    nowMs - preMinuteReferenceAgeMs,
+    maxReferenceDistanceMs
+  );
+
+  if (!reference) {
+    return selectAttendanceFrameByReceiptWindow(nowMs) ?? preferred;
+  }
 
   return selectByPresence(
     preferred,
