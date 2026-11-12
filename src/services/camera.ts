@@ -39,7 +39,9 @@ function boundedNumberList(
 ): number[] {
   const parsed = String(value || '')
     .split(',')
-    .map((item) => Number(item.trim()))
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .map((item) => Number(item))
     .filter((item) => Number.isFinite(item))
     .map((item) => Math.min(max, Math.max(min, item)));
 
@@ -57,19 +59,21 @@ const presenceSelectionEnabled = envEnabled(
   process.env.ATTENDANCE_CAMERA_PRESENCE_SELECTION_ENABLED ?? '1'
 );
 const captureCandidateOffsetsMs = boundedNumberList(
-  process.env.ATTENDANCE_CAMERA_CANDIDATE_OFFSETS_MS,
-  [captureOffsetMs, 1200, 0],
+  process.env.ATTENDANCE_CAMERA_SCAN_OFFSETS_MS,
+  [0, 2000, 4000, 6000, 8000, 10000],
   0,
-  15000
+  Math.max(0, bufferSeconds * 1000 - 1000)
 );
 if (!captureCandidateOffsetsMs.includes(captureOffsetMs)) {
-  captureCandidateOffsetsMs.unshift(captureOffsetMs);
+  captureCandidateOffsetsMs.push(captureOffsetMs);
 }
+captureCandidateOffsetsMs.sort((left, right) => left - right);
+
 const referenceOffsetMs = boundedNumber(
-  process.env.ATTENDANCE_CAMERA_REFERENCE_OFFSET_MS,
-  12000,
+  process.env.ATTENDANCE_CAMERA_SCAN_REFERENCE_OFFSET_MS,
+  14000,
   1000,
-  Math.max(1000, bufferSeconds * 1000)
+  Math.max(1000, bufferSeconds * 1000 - 500)
 );
 const presenceMinimumDifference = boundedNumber(
   process.env.ATTENDANCE_CAMERA_PRESENCE_MIN_DIFFERENCE,
@@ -424,10 +428,10 @@ export function getAttendanceCameraStatus() {
     bufferedFrames: frames.length,
     lastFrameAt: lastFrameAt == null ? null : new Date(lastFrameAt).toISOString(),
     streamStartedAt: streamStartedAt == null ? null : new Date(streamStartedAt).toISOString(),
-    selectionMode: presenceSelectionEnabled ? 'presence-roi' : 'fixed-offset',
+    selectionMode: presenceSelectionEnabled ? 'receipt-window-presence-roi' : 'fixed-offset',
     captureOffsetMs,
-    candidateOffsetsMs: captureCandidateOffsetsMs,
-    referenceOffsetMs,
+    scanOffsetsMs: captureCandidateOffsetsMs,
+    scanReferenceOffsetMs: referenceOffsetMs,
     presenceMinimumDifference,
     presenceRoi
   };
