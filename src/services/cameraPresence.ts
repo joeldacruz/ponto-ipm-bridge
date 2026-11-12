@@ -71,34 +71,52 @@ export function scorePresenceDifference(
 
   if (endX <= startX || endY <= startY) return null;
 
-  // Amostragem em grade 2x2 reduz CPU sem perder alteracoes humanas relevantes.
+  // Amostragem em grade 2x2 reduz CPU. Primeiro medimos a variacao global
+  // de luminosidade para compensar autoexposicao/luzes da camera.
   const step = 2;
-  let totalDifference = 0;
+  let referenceSum = 0;
+  let candidateSum = 0;
   let samples = 0;
+
+  const luma = (image: RawRgbaImage, index: number): number => (
+    Number(image.data[index]) * 77 +
+    Number(image.data[index + 1]) * 150 +
+    Number(image.data[index + 2]) * 29
+  ) >> 8;
 
   for (let y = startY; y < endY; y += step) {
     for (let x = startX; x < endX; x += step) {
       const index = (y * width + x) * 4;
-
-      const referenceLuma = (
-        Number(reference.data[index]) * 77 +
-        Number(reference.data[index + 1]) * 150 +
-        Number(reference.data[index + 2]) * 29
-      ) >> 8;
-
-      const candidateLuma = (
-        Number(candidate.data[index]) * 77 +
-        Number(candidate.data[index + 1]) * 150 +
-        Number(candidate.data[index + 2]) * 29
-      ) >> 8;
-
-      totalDifference += Math.abs(referenceLuma - candidateLuma);
+      referenceSum += luma(reference, index);
+      candidateSum += luma(candidate, index);
       samples += 1;
     }
   }
 
   if (samples === 0) return null;
-  return totalDifference / (samples * 255);
+
+  const globalShift = (candidateSum - referenceSum) / samples;
+  let changedPixels = 0;
+
+  // Depois da compensacao, conta apenas mudancas locais relevantes.
+  // Uma pessoa ocupa uma fracao significativa da ROI; uma mudanca uniforme
+  // de iluminacao tende a desaparecer neste calculo.
+  const localDifferenceThreshold = 20;
+
+  for (let y = startY; y < endY; y += step) {
+    for (let x = startX; x < endX; x += step) {
+      const index = (y * width + x) * 4;
+      const residual = Math.abs(
+        (luma(candidate, index) - luma(reference, index)) - globalShift
+      );
+
+      if (residual >= localDifferenceThreshold) {
+        changedPixels += 1;
+      }
+    }
+  }
+
+  return changedPixels / samples;
 }
 
 export function chooseBestPresenceCandidate<T>(
