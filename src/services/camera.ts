@@ -27,7 +27,10 @@ function envEnabled(value: string | undefined): boolean {
 }
 
 function boundedNumber(value: string | undefined, fallback: number, min: number, max: number): number {
-  const parsed = Number(value);
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+
+  const parsed = Number(text);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
 }
