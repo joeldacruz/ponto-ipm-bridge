@@ -9,7 +9,7 @@ import {
   scorePresenceDifference,
   type RawRgbaImage
 } from './cameraPresence.js';
-import { minutePrecisionAgeWindow, wallClockMs } from './cameraTiming.js';
+import { minutePrecisionAgeWindow, minutePrecisionEventIsRecent } from './cameraTiming.js';
 
 type BufferedFrame = {
   capturedAt: number;
@@ -301,11 +301,11 @@ function currentWallClockMs(): number {
 }
 
 function eventIsRecent(event: DeviceEvent): boolean {
-  const occurredAt = wallClockMs(event.occurredAt);
-  if (occurredAt == null) return false;
-
-  const age = currentWallClockMs() - occurredAt;
-  return age >= -30_000 && age <= eventMaxAgeSeconds * 1000;
+  return minutePrecisionEventIsRecent(
+    event.occurredAt,
+    currentWallClockMs(),
+    eventMaxAgeSeconds * 1000
+  );
 }
 
 function selectBufferedFrame(targetMs: number, maxDistanceMs?: number): BufferedFrame | null {
