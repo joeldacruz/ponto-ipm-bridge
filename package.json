@@ -16,7 +16,8 @@
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "fast-xml-parser": "^5.0.8",
-    "nodemailer": "^7.0.10"
+    "nodemailer": "^7.0.10",
+    "jpeg-js": "^0.4.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
