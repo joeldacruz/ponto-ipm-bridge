@@ -48,3 +48,18 @@ export function minutePrecisionAgeWindow(
     maxAgeMs: boundedMaxAgeMs
   };
 }
+
+export function minutePrecisionEventIsRecent(
+  occurredAt: string,
+  currentWallClockEpochMs: number,
+  maxAgeMs: number
+): boolean {
+  const minuteStart = wallClockMs(occurredAt);
+  if (minuteStart == null) return false;
+
+  const minuteEnd = minuteStart + 59_999;
+  const earliestPossibleAgeMs = currentWallClockEpochMs - minuteEnd;
+
+  return earliestPossibleAgeMs >= -30_000
+    && earliestPossibleAgeMs <= maxAgeMs;
+}
