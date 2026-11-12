@@ -55,6 +55,19 @@ test('wallClockMs rejeita valor invalido', () => {
   assert.equal(wallClockMs('invalido'), null);
 });
 
+test('minutePrecisionEventIsRecent aceita recebimento no inicio do mesmo minuto', () => {
+  const current = Date.UTC(2026, 10, 12, 10, 13, 5);
+
+  assert.equal(
+    minutePrecisionEventIsRecent(
+      '2026-11-12T10:13:00',
+      current,
+      90_000
+    ),
+    true
+  );
+});
+
 test('minutePrecisionEventIsRecent aceita evento valido no fim do minuto', () => {
   const current = Date.UTC(2026, 10, 12, 10, 14, 31);
 
