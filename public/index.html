@@ -981,8 +981,13 @@ let attendanceSearchRequestId=0;
 
 async function searchAttendance(options={}){
   const silent=!!options.silent;
-  const requestId=++attendanceSearchRequestId;
   const button=document.getElementById('attendanceSearchButton');
+
+  // O auto-refresh nunca deve substituir nem interferir em uma busca manual
+  // que ainda esteja em andamento.
+  if(silent && button.disabled) return;
+
+  const requestId=++attendanceSearchRequestId;
   const params=new URLSearchParams({limit:'100'});
   const query=document.getElementById('attendanceQuery').value.trim();
   const dateFrom=document.getElementById('attendanceDateFrom').value;
