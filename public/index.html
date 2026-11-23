@@ -90,6 +90,23 @@
     }
     .employee-search input:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(29,90,66,.14);outline:0}
     .employee-search input::placeholder{color:#9aa6a1}
+    .attendance-head-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .attendance-filter{
+      display:grid;
+      grid-template-columns:minmax(230px,1.6fr) 150px 150px minmax(180px,1fr) 140px auto auto;
+      gap:12px;align-items:end;padding:14px 20px;border-bottom:1px solid var(--line-2);background:#fafcfb
+    }
+    .attendance-filter .field{min-width:0}
+    .attendance-filter .btn{height:42px;white-space:nowrap}
+    @media(max-width:1180px){
+      .attendance-filter{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .attendance-filter .attendance-query{grid-column:span 2}
+    }
+    @media(max-width:700px){
+      .attendance-filter{grid-template-columns:1fr;padding:14px}
+      .attendance-filter .attendance-query{grid-column:auto}
+      .attendance-filter .btn{width:100%}
+    }
 
     /* Alertas */
     #alerts{display:grid;gap:10px;margin-bottom:16px}
@@ -429,9 +446,45 @@
 
   <section class="panel" id="batidas">
     <div class="panel-h">
-      <h2><svg><use href="#i-camera"/></svg>Últimas batidas</h2>
-      <span class="count camera-status off" id="cameraStatus"><span class="dot"></span>Câmera desativada</span>
+      <h2><svg><use href="#i-camera"/></svg>Consultar batidas</h2>
+      <div class="attendance-head-meta">
+        <span class="count" id="attendanceCount">Carregando...</span>
+        <span class="count camera-status off" id="cameraStatus"><span class="dot"></span>Câmera desativada</span>
+      </div>
     </div>
+    <form class="attendance-filter" id="attendanceSearchForm">
+      <div class="field attendance-query">
+        <label>Buscar
+          <input id="attendanceQuery" type="text" autocomplete="off" placeholder="Servidor, matrícula, nº no REP ou NSR">
+        </label>
+      </div>
+      <div class="field">
+        <label>De
+          <input id="attendanceDateFrom" type="date">
+        </label>
+      </div>
+      <div class="field">
+        <label>Até
+          <input id="attendanceDateTo" type="date">
+        </label>
+      </div>
+      <div class="field">
+        <label>REP
+          <select id="attendanceDevice"><option value="">Todos os REPs</option></select>
+        </label>
+      </div>
+      <div class="field">
+        <label>Foto
+          <select id="attendancePhotoFilter">
+            <option value="">Todas</option>
+            <option value="with">Com foto</option>
+            <option value="without">Sem foto</option>
+          </select>
+        </label>
+      </div>
+      <button type="submit" class="btn" id="attendanceSearchButton">Buscar</button>
+      <button type="button" class="btn ghost" onclick="clearAttendanceFilters()">Limpar</button>
+    </form>
     <div class="tw">
       <table class="cards">
         <thead><tr><th>Data/hora</th><th>Servidor</th><th>Matrícula</th><th>REP</th><th>NSR</th><th>Foto</th></tr></thead>
@@ -756,11 +809,10 @@ async function load(options={}){
   }
 
   try{
-  const [health,devices,employees,recentAttendance]=await Promise.all([
+  const [health,devices,employees]=await Promise.all([
     fetch('/health').then(r=>r.json()),
     fetch('/api/devices').then(r=>r.json()),
-    fetch('/api/employees').then(r=>r.json()),
-    fetch('/api/attendance/recent?limit=20').then(r=>r.json())
+    fetch('/api/employees').then(r=>r.json())
   ]);
   const total=health.devices?.total??devices.length;
   const online=health.devices?.online??devices.filter(d=>d.status==='ONLINE').length;
@@ -812,20 +864,16 @@ async function load(options={}){
     cameraStatus.innerHTML='<span class="dot"></span>Câmera desativada';
   }
 
-  window._recentAttendance=Array.isArray(recentAttendance)?recentAttendance:[];
-  document.getElementById('attendanceRecent').innerHTML=Array.isArray(recentAttendance)&&recentAttendance.length
-    ? recentAttendance.map(a=>`
-      <tr>
-        <td data-label="Data/hora" class="mono">${fmtOccurrence(a.occurred_at)}</td>
-        <td data-label="Servidor" class="cell-title"><div class="t-name">${esc(a.name||'Não identificado')}</div></td>
-        <td data-label="Matrícula" class="mono">${esc(a.registration||'—')}</td>
-        <td data-label="REP">${esc(a.device_name||'—')}</td>
-        <td data-label="NSR" class="mono">${esc(a.nsr??'—')}</td>
-        <td data-label="Foto">${a.photo_available
-          ? `<button type="button" class="btn ghost sm" onclick="openAttendancePhoto(${Number(a.id)})">${ico('camera')}Ver foto</button>`
-          : '<span class="muted">Sem foto</span>'}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="6" class="empty">Nenhuma batida coletada.</td></tr>';
+  const attendanceDevice=document.getElementById('attendanceDevice');
+  const previousAttendanceDevice=attendanceDevice.value;
+  attendanceDevice.innerHTML='<option value="">Todos os REPs</option>'+devices.map(d=>
+    `<option value="${esc(d.id)}">${esc(d.name)} · ${esc(d.vendor)}</option>`
+  ).join('');
+  if(previousAttendanceDevice && devices.some(d=>d.id===previousAttendanceDevice)){
+    attendanceDevice.value=previousAttendanceDevice;
+  }
+
+  await searchAttendance({silent:true});
 
   document.getElementById('deviceChecks').innerHTML=devices.filter(d=>d.active).map(d=>`
     <label class="check"><input type="checkbox" name="deviceId" value="${esc(d.id)}" data-vendor="${esc(String(d.vendor||'').toUpperCase())}">
@@ -907,10 +955,83 @@ async function load(options={}){
   }
 }
 
+function renderAttendanceResults(items){
+  const rows=Array.isArray(items)?items:[];
+  window._attendanceResults=rows;
+  document.getElementById('attendanceCount').textContent=rows.length
+    ? `${rows.length} ${rows.length===1?'batida exibida':'batidas exibidas'}`
+    : 'Nenhum resultado';
+
+  document.getElementById('attendanceRecent').innerHTML=rows.length
+    ? rows.map(a=>`
+      <tr>
+        <td data-label="Data/hora" class="mono">${fmtOccurrence(a.occurred_at)}</td>
+        <td data-label="Servidor" class="cell-title"><div class="t-name">${esc(a.name||'Não identificado')}</div></td>
+        <td data-label="Matrícula" class="mono">${esc(a.registration||'—')}</td>
+        <td data-label="REP">${esc(a.device_name||'—')}</td>
+        <td data-label="NSR" class="mono">${esc(a.nsr??'—')}</td>
+        <td data-label="Foto">${a.photo_available
+          ? `<button type="button" class="btn ghost sm" onclick="openAttendancePhoto(${Number(a.id)})">${ico('camera')}Ver foto</button>`
+          : '<span class="muted">Sem foto</span>'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" class="empty">Nenhuma batida encontrada para os filtros informados.</td></tr>';
+}
+
+async function searchAttendance(options={}){
+  const silent=!!options.silent;
+  const button=document.getElementById('attendanceSearchButton');
+  const params=new URLSearchParams({limit:'100'});
+  const query=document.getElementById('attendanceQuery').value.trim();
+  const dateFrom=document.getElementById('attendanceDateFrom').value;
+  const dateTo=document.getElementById('attendanceDateTo').value;
+  const deviceId=document.getElementById('attendanceDevice').value;
+  const photo=document.getElementById('attendancePhotoFilter').value;
+
+  if(query) params.set('q',query);
+  if(dateFrom) params.set('dateFrom',dateFrom);
+  if(dateTo) params.set('dateTo',dateTo);
+  if(deviceId) params.set('deviceId',deviceId);
+  if(photo) params.set('photo',photo);
+
+  if(!silent){
+    button.disabled=true;
+    button.classList.add('busy');
+  }
+
+  try{
+    const response=await fetch(`/api/attendance/search?${params.toString()}`);
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(body.error||'Falha ao consultar batidas.');
+    renderAttendanceResults(body);
+  }catch(error){
+    console.error(error);
+    if(!silent) toast(error instanceof Error?error.message:'Falha ao consultar batidas.');
+  }finally{
+    if(!silent){
+      button.disabled=false;
+      button.classList.remove('busy');
+    }
+  }
+}
+
+function clearAttendanceFilters(){
+  document.getElementById('attendanceQuery').value='';
+  document.getElementById('attendanceDateFrom').value='';
+  document.getElementById('attendanceDateTo').value='';
+  document.getElementById('attendanceDevice').value='';
+  document.getElementById('attendancePhotoFilter').value='';
+  searchAttendance().catch(err=>console.error(err));
+}
+
+document.getElementById('attendanceSearchForm').addEventListener('submit',ev=>{
+  ev.preventDefault();
+  searchAttendance().catch(err=>console.error(err));
+});
+
 function openAttendancePhoto(id){
   const dialog=document.getElementById('photoDialog');
   const image=document.getElementById('attendancePhoto');
-  const item=(window._recentAttendance||[]).find(x=>Number(x.id)===Number(id));
+  const item=(window._attendanceResults||[]).find(x=>Number(x.id)===Number(id));
   const meta=item
     ? `${item.name||'Servidor'} · ${fmtOccurrence(item.occurred_at)} · NSR ${item.nsr??'—'}`
     : '';
