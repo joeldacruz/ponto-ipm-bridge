@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { db } from '../storage/db.js';
-import { listAttendance, listRecentAttendance, saveEvents } from '../services/events.js';
+import { listAttendance, listRecentAttendance, saveEvents, searchAttendance } from '../services/events.js';
 import {
   buildAttendanceAfdDownload,
   buildAttendanceAfdDailyDownload,
@@ -206,6 +206,38 @@ router.use((req, res, next) => {
 router.get('/api/attendance/recent', (req, res) => {
   const limit = Number(req.query.limit || 20);
   res.json(listRecentAttendance(limit));
+});
+
+router.get('/api/attendance/search', (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const dateFrom = typeof req.query.dateFrom === 'string' ? req.query.dateFrom.trim() : '';
+  const dateTo = typeof req.query.dateTo === 'string' ? req.query.dateTo.trim() : '';
+  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId.trim() : '';
+  const photo = typeof req.query.photo === 'string' ? req.query.photo.trim() : '';
+  const limit = Number(req.query.limit || 100);
+
+  const validDate = (value: string) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+  if (!validDate(dateFrom) || !validDate(dateTo)) {
+    return res.status(400).json({ error: 'Data deve ser AAAA-MM-DD' });
+  }
+
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    return res.status(400).json({ error: 'Data inicial não pode ser maior que a data final' });
+  }
+
+  if (photo && photo !== 'with' && photo !== 'without') {
+    return res.status(400).json({ error: 'Filtro de foto inválido' });
+  }
+
+  res.json(searchAttendance({
+    query: query || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    deviceId: deviceId || undefined,
+    photo: photo === 'with' || photo === 'without' ? photo : undefined,
+    limit: Number.isFinite(limit) ? limit : 100
+  }));
 });
 
 router.get('/api/attendance/:id/photo', (req, res) => {
