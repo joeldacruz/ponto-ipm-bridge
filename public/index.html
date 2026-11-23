@@ -977,8 +977,11 @@ function renderAttendanceResults(items){
     : '<tr><td colspan="6" class="empty">Nenhuma batida encontrada para os filtros informados.</td></tr>';
 }
 
+let attendanceSearchRequestId=0;
+
 async function searchAttendance(options={}){
   const silent=!!options.silent;
+  const requestId=++attendanceSearchRequestId;
   const button=document.getElementById('attendanceSearchButton');
   const params=new URLSearchParams({limit:'100'});
   const query=document.getElementById('attendanceQuery').value.trim();
@@ -1002,12 +1005,14 @@ async function searchAttendance(options={}){
     const response=await fetch(`/api/attendance/search?${params.toString()}`);
     const body=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(body.error||'Falha ao consultar batidas.');
+    if(requestId!==attendanceSearchRequestId) return;
     renderAttendanceResults(body);
   }catch(error){
+    if(requestId!==attendanceSearchRequestId) return;
     console.error(error);
     if(!silent) toast(error instanceof Error?error.message:'Falha ao consultar batidas.');
   }finally{
-    if(!silent){
+    if(!silent && requestId===attendanceSearchRequestId){
       button.disabled=false;
       button.classList.remove('busy');
     }
