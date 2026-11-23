@@ -156,6 +156,96 @@ export function listAttendance(period?: string) {
 }
 
 
+export type AttendanceSearchFilters = {
+  query?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  deviceId?: string;
+  photo?: 'with' | 'without';
+  limit?: number;
+};
+
+function normalizeAttendanceSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+db.function(
+  'attendance_search_normalize',
+  { deterministic: true },
+  (value: unknown) => normalizeAttendanceSearch(String(value ?? ''))
+);
+
+export function searchAttendance(filters: AttendanceSearchFilters = {}) {
+  const where = ["e.kind='ATTENDANCE'"];
+  const params: Array<string | number> = [];
+
+  const query = String(filters.query || '').trim();
+  if (query) {
+    const term = `%${escapeLike(normalizeAttendanceSearch(query))}%`;
+    where.push(`(
+      attendance_search_normalize(COALESCE(emp.name,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(COALESCE(emp.registration,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(COALESCE(e.employee_no,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(COALESCE(d.name,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(CAST(COALESCE(e.nsr,'') AS TEXT)) LIKE ? ESCAPE '\\'
+    )`);
+    params.push(term, term, term, term, term);
+  }
+
+  if (filters.dateFrom) {
+    where.push('substr(e.occurred_at,1,10) >= ?');
+    params.push(filters.dateFrom);
+  }
+
+  if (filters.dateTo) {
+    where.push('substr(e.occurred_at,1,10) <= ?');
+    params.push(filters.dateTo);
+  }
+
+  if (filters.deviceId) {
+    where.push('e.device_id = ?');
+    params.push(filters.deviceId);
+  }
+
+  if (filters.photo === 'with') {
+    where.push('e.photo_path IS NOT NULL');
+  } else if (filters.photo === 'without') {
+    where.push('e.photo_path IS NULL');
+  }
+
+  const safeLimit = Math.min(500, Math.max(1, Math.trunc(filters.limit || 100)));
+
+  return db.prepare(`
+    SELECT
+      e.id,
+      e.occurred_at,
+      e.nsr,
+      e.employee_no,
+      e.photo_path IS NOT NULL AS photo_available,
+      e.photo_captured_at,
+      emp.name,
+      emp.registration,
+      d.id AS device_id,
+      d.name AS device_name
+    FROM device_events e
+    LEFT JOIN employee_device_bindings b
+      ON b.device_id=e.device_id
+     AND ${employeeNoMatchSql('b', 'e')}
+    LEFT JOIN employees emp ON emp.id=b.employee_id
+    LEFT JOIN devices d ON d.id=e.device_id
+    WHERE ${where.join('\n      AND ')}
+    ORDER BY e.occurred_at DESC, e.id DESC
+    LIMIT ?
+  `).all(...params, safeLimit);
+}
+
 export function listRecentAttendance(limit = 20) {
   const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit) || 20));
 

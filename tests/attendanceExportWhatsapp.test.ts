@@ -11,6 +11,7 @@ delete process.env.WHATSAPP_GATEWAY_API_KEY;
 
 let db: typeof import('../src/storage/db.js')['db'];
 let saveEvents: typeof import('../src/services/events.js')['saveEvents'];
+let searchAttendance: typeof import('../src/services/events.js')['searchAttendance'];
 let buildAttendanceAfdDownload: typeof import('../src/services/exporter.js')['buildAttendanceAfdDownload'];
 let buildAttendanceAfdDailyDownload: typeof import('../src/services/exporter.js')['buildAttendanceAfdDailyDownload'];
 let buildGenericCsvDownload: typeof import('../src/services/exporter.js')['buildGenericCsvDownload'];
@@ -24,7 +25,7 @@ const RAW = '0000001233291020260828' + REP_EMPLOYEE;
 
 test.before(async () => {
   ({ db } = await import('../src/storage/db.js'));
-  ({ saveEvents } = await import('../src/services/events.js'));
+  ({ saveEvents, searchAttendance } = await import('../src/services/events.js'));
   ({
     buildAttendanceAfdDownload,
     buildAttendanceAfdDailyDownload,
@@ -252,4 +253,50 @@ test('CSV diário filtra somente as marcações do dia selecionado', () => {
   assert.match(out.content, /2026-10-29T12:00:00/);
   assert.doesNotMatch(out.content, /2026-10-30T12:00:00/);
   assert.equal(out.fileName, 'ponto-rep-topdata-test-2026-10-29.csv');
+});
+
+
+test('consulta de batidas encontra nome com acento independentemente de caixa e acento', () => {
+  wipe();
+
+  const result = db.prepare(`
+    INSERT INTO employees(
+      name, registration, device_employee_no,
+      whatsapp_number, whatsapp_attendance_enabled
+    )
+    VALUES(?,?,?,?,0)
+  `).run(
+    'JOÃO DA SILVA',
+    '2002-00',
+    PIS,
+    null
+  );
+
+  const employeeId = Number(result.lastInsertRowid);
+
+  db.prepare(`
+    INSERT INTO employee_device_bindings(
+      employee_id, device_id, device_employee_no, sync_status
+    )
+    VALUES(?,?,?,'DONE')
+  `).run(employeeId, DEV, PIS);
+
+  saveEvents([{
+    sourceId: DEV + ':130',
+    deviceId: DEV,
+    employeeNo: REP_EMPLOYEE,
+    occurredAt: '2026-10-30T13:15:00',
+    kind: 'ATTENDANCE',
+    nsr: 130,
+    rawType: '3',
+    rawPayload: '0000001303301020261315' + REP_EMPLOYEE
+  }]);
+
+  const semAcento = searchAttendance({ query: 'joao' }) as any[];
+  const comAcento = searchAttendance({ query: 'JOÃO' }) as any[];
+
+  assert.equal(semAcento.length, 1);
+  assert.equal(comAcento.length, 1);
+  assert.equal(semAcento[0].name, 'JOÃO DA SILVA');
+  assert.equal(comAcento[0].nsr, 130);
 });
