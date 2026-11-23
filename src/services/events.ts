@@ -165,9 +165,22 @@ export type AttendanceSearchFilters = {
   limit?: number;
 };
 
+function normalizeAttendanceSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+}
+
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
+
+db.function(
+  'attendance_search_normalize',
+  { deterministic: true },
+  (value: unknown) => normalizeAttendanceSearch(String(value ?? ''))
+);
 
 export function searchAttendance(filters: AttendanceSearchFilters = {}) {
   const where = ["e.kind='ATTENDANCE'"];
@@ -175,13 +188,13 @@ export function searchAttendance(filters: AttendanceSearchFilters = {}) {
 
   const query = String(filters.query || '').trim();
   if (query) {
-    const term = `%${escapeLike(query.toLowerCase())}%`;
+    const term = `%${escapeLike(normalizeAttendanceSearch(query))}%`;
     where.push(`(
-      lower(COALESCE(emp.name,'')) LIKE ? ESCAPE '\\'
-      OR lower(COALESCE(emp.registration,'')) LIKE ? ESCAPE '\\'
-      OR lower(COALESCE(e.employee_no,'')) LIKE ? ESCAPE '\\'
-      OR lower(COALESCE(d.name,'')) LIKE ? ESCAPE '\\'
-      OR CAST(COALESCE(e.nsr,'') AS TEXT) LIKE ? ESCAPE '\\'
+      attendance_search_normalize(COALESCE(emp.name,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(COALESCE(emp.registration,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(COALESCE(e.employee_no,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(COALESCE(d.name,'')) LIKE ? ESCAPE '\\'
+      OR attendance_search_normalize(CAST(COALESCE(e.nsr,'') AS TEXT)) LIKE ? ESCAPE '\\'
     )`);
     params.push(term, term, term, term, term);
   }
